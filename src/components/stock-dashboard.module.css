@@ -34,26 +34,11 @@
   pointer-events: none;
 }
 
-.eyebrow {
-  margin: 0 0 10px;
-  color: var(--accent);
-  font-size: 0.9rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
 .heroTitle {
   margin: 0;
-  max-width: 720px;
+  max-width: 980px;
   font-size: clamp(2rem, 4vw, 4rem);
   line-height: 0.98;
-}
-
-.heroText {
-  max-width: 780px;
-  color: var(--muted);
-  font-size: 1rem;
-  line-height: 1.7;
 }
 
 .heroGrid {
@@ -61,20 +46,6 @@
   grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
   gap: 22px;
   align-items: end;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.chip {
-  padding: 9px 14px;
-  border: 1px solid rgba(89, 199, 255, 0.18);
-  border-radius: 999px;
-  background: rgba(89, 199, 255, 0.08);
-  color: var(--text);
 }
 
 .guideCard {
@@ -409,11 +380,6 @@
 
 .emptyState {
   margin: 0;
-}
-
-.footerNote {
-  color: var(--muted);
-  line-height: 1.7;
 }
 
 @media (max-width: 1120px) {

@@ -187,18 +187,7 @@ export function StockDashboard() {
         <section className={styles.hero}>
           <div className={styles.heroGrid}>
             <div>
-              <p className={styles.eyebrow}>Flexible Market Viewer</p>
               <h1 className={styles.heroTitle}>一页里自由拖、自由缩、自由选时间范围看全球行情</h1>
-              <p className={styles.heroText}>
-                这个网页版本专门解决常见股票 App 时间范围受限的问题。你可以同时用预设区间、自定义日期、K
-                线拖拽缩放，以及分时 / 日K / 周K / 月K 四种视图来查股票、外汇、货币和大宗商品。
-              </p>
-              <div className={styles.chips}>
-                <span className={styles.chip}>手机电脑自适应</span>
-                <span className={styles.chip}>可直接部署上网</span>
-                <span className={styles.chip}>支持全球常见代码</span>
-                <span className={styles.chip}>免费公开数据代理</span>
-              </div>
             </div>
             <aside className={styles.guideCard}>
               <h2>常用代码示例</h2>
@@ -426,14 +415,6 @@ export function StockDashboard() {
                 4. 图表原生支持手势缩放、鼠标滚轮缩放和横向拖动。
                 <br />
                 5. 提供分时、日K、周K、月K，以及 MA 和成交量。
-              </p>
-            </section>
-
-            <section className={styles.panel}>
-              <h2 className={styles.sectionTitle}>上线建议</h2>
-              <p className={styles.footerNote}>
-                这是一个标准 Next.js 项目，后面最省事的部署方式就是直接推到 GitHub，再接到 Vercel。这样你电脑和手机都能直接通过网址访问，
-                不需要自己常开本地电脑。
               </p>
             </section>
           </aside>
