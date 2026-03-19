@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { CandlestickSeries, ColorType, HistogramSeries, LineSeries, createChart } from "lightweight-charts";
 import type { IChartApi, ISeriesApi, LogicalRange, Time } from "lightweight-charts";
@@ -33,6 +33,16 @@ export function CandlestickChart({
   const movingAverageRefs = useRef<Array<{ period: number; series: ISeriesApi<"Line"> }>>([]);
   const latestVisibleWindowRef = useRef<string>("");
   const suppressNextVisibleEventRef = useRef(false);
+  const dataRef = useRef<CandlePoint[]>(data);
+  const onVisibleWindowChangeRef = useRef(onVisibleWindowChange);
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  useEffect(() => {
+    onVisibleWindowChangeRef.current = onVisibleWindowChange;
+  }, [onVisibleWindowChange]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -110,7 +120,7 @@ export function CandlestickChart({
     });
 
     const handleVisibleRangeChange = (range: LogicalRange | null) => {
-      if (!onVisibleWindowChange || !range || data.length === 0) {
+      if (!onVisibleWindowChangeRef.current || !range || dataRef.current.length === 0) {
         return;
       }
 
@@ -119,11 +129,11 @@ export function CandlestickChart({
         return;
       }
 
-      const startIndex = clampIndex(Math.floor(range.from), data.length);
-      const endIndex = clampIndex(Math.ceil(range.to), data.length);
+      const startIndex = clampIndex(Math.floor(range.from), dataRef.current.length);
+      const endIndex = clampIndex(Math.ceil(range.to), dataRef.current.length);
       const nextWindow = {
-        start: data[startIndex]?.time ?? null,
-        end: data[endIndex]?.time ?? null,
+        start: dataRef.current[startIndex]?.time ?? null,
+        end: dataRef.current[endIndex]?.time ?? null,
       };
       const signature = `${nextWindow.start ?? ""}:${nextWindow.end ?? ""}`;
 
@@ -132,7 +142,7 @@ export function CandlestickChart({
       }
 
       latestVisibleWindowRef.current = signature;
-      onVisibleWindowChange(nextWindow);
+      onVisibleWindowChangeRef.current(nextWindow);
     };
 
     chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
@@ -159,7 +169,7 @@ export function CandlestickChart({
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
     };
-  }, [data, onVisibleWindowChange]);
+  }, []);
 
   useLayoutEffect(() => {
     if (!chartRef.current || !candleSeriesRef.current || !volumeSeriesRef.current) {
@@ -193,7 +203,7 @@ export function CandlestickChart({
     } else {
       chartRef.current.timeScale().fitContent();
     }
-  }, [data, movingAverages, showVolume, visibleWindow]);
+  }, [data, showVolume, movingAverages, visibleWindow]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 }

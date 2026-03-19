@@ -49,12 +49,11 @@ export function StockDashboard() {
   const [presetSelection, setPresetSelection] = useState<RangePreset>(DEFAULT_RANGE);
   const [activePreset, setActivePreset] = useState<RangePreset | null>(DEFAULT_RANGE);
   const [dateInputs, setDateInputs] = useState(initialDates);
-  const [visibleWindowRequest, setVisibleWindowRequest] = useState<VisibleWindowRequest>({
+  const [viewWindow, setViewWindow] = useState<VisibleWindowRequest>({
     start: initialDates.start,
     end: initialDates.end,
     version: 0,
   });
-  const [visibleWindow, setVisibleWindow] = useState<VisibleWindow | null>(null);
   const deferredQuery = useDeferredValue(draftSymbol.trim());
   const chartCacheKey = `${selectedSymbol}:${interval}`;
 
@@ -96,9 +95,7 @@ export function StockDashboard() {
   useEffect(() => {
     const controller = new AbortController();
     const cached = chartCacheRef.current.get(chartCacheKey) ?? null;
-    const fetchWindow = getFetchWindow(interval, visibleWindowRequest, cached);
-
-    setVisibleWindow(null);
+    const fetchWindow = getFetchWindow(interval, viewWindow, cached);
     setChartError(null);
 
     if (cached && !fetchWindow) {
@@ -144,37 +141,37 @@ export function StockDashboard() {
     void loadChart();
 
     return () => controller.abort();
-  }, [chartCacheKey, interval, selectedSymbol, visibleWindowRequest]);
+  }, [chartCacheKey, interval, selectedSymbol, viewWindow]);
 
   useEffect(() => {
     if (!chartData) {
       return;
     }
 
-    const nextPreset = detectPreset(windowForPreset(visibleWindowRequest, chartData), chartData.points);
+    const nextPreset = detectPreset(windowForPreset(viewWindow, chartData), chartData.points);
     setActivePreset(nextPreset);
-  }, [chartData, visibleWindowRequest]);
+  }, [chartData, viewWindow]);
 
   useEffect(() => {
-    if (!chartData || !visibleWindow?.start || !visibleWindow?.end) {
+    if (!chartData || !viewWindow.start || !viewWindow.end) {
       return;
     }
 
     const nextInputs = {
-      start: toInputDate(visibleWindow.start),
-      end: toInputDate(visibleWindow.end),
+      start: toInputDate(viewWindow.start),
+      end: toInputDate(viewWindow.end),
     };
 
     setDateInputs((current) => (sameInputWindow(current, nextInputs) ? current : nextInputs));
     setActivePreset(detectPreset(nextInputs, chartData.points));
-  }, [chartData, visibleWindow]);
+  }, [chartData, viewWindow]);
 
   const isWatched = watchlist.includes(selectedSymbol);
   const displayName = chartData?.snapshot.longName || chartData?.snapshot.shortName || selectedSymbol;
   const change = chartData?.snapshot.change ?? null;
   const changeClass = (change ?? 0) >= 0 ? styles.changePositive : styles.changeNegative;
   const showSearchResults = !!deferredQuery && deferredQuery.toUpperCase() !== selectedSymbol.toUpperCase();
-  const visiblePoints = chartData ? filterVisiblePoints(chartData.points, visibleWindow ?? visibleWindowRequest) : [];
+  const visiblePoints = chartData ? filterVisiblePoints(chartData.points, viewWindow) : [];
   const pointsForMetrics = visiblePoints.length > 0 ? visiblePoints : chartData?.points ?? [];
 
   function submitSymbol(symbol: string) {
@@ -192,11 +189,25 @@ export function StockDashboard() {
   }
 
   function pushVisibleWindow(window: VisibleWindow) {
-    setVisibleWindowRequest((current) => ({
+    setViewWindow((current) => ({
       start: window.start,
       end: window.end,
       version: current.version + 1,
     }));
+  }
+
+  function handleVisibleWindowChange(window: VisibleWindow) {
+    setViewWindow((current) => {
+      if (current.start === window.start && current.end === window.end) {
+        return current;
+      }
+
+      return {
+        start: window.start,
+        end: window.end,
+        version: current.version,
+      };
+    });
   }
 
   function applyPreset(nextRange: RangePreset) {
@@ -511,8 +522,8 @@ export function StockDashboard() {
                   data={chartData.points}
                   showVolume={showVolume}
                   movingAverages={movingAverages}
-                  visibleWindow={visibleWindowRequest}
-                  onVisibleWindowChange={setVisibleWindow}
+                  visibleWindow={viewWindow}
+                  onVisibleWindowChange={handleVisibleWindowChange}
                 />
                 {chartLoading && (
                   <div className={styles.chartOverlay}>
