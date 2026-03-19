@@ -509,7 +509,6 @@ export function StockDashboard() {
                 <CandlestickChart
                   key={`${selectedSymbol}-${interval}`}
                   data={chartData.points}
-                  interval={interval}
                   showVolume={showVolume}
                   movingAverages={movingAverages}
                   visibleWindow={visibleWindowRequest}

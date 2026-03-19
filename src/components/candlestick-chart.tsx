@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { CandlestickSeries, ColorType, HistogramSeries, LineSeries, createChart } from "lightweight-charts";
 import type { IChartApi, ISeriesApi, LogicalRange, Time } from "lightweight-charts";
@@ -8,7 +8,6 @@ import type { CandlePoint, VisibleWindow, VisibleWindowRequest } from "@/lib/mar
 
 type CandlestickChartProps = {
   data: CandlePoint[];
-  interval: string;
   showVolume: boolean;
   movingAverages: number[];
   visibleWindow: VisibleWindowRequest;
@@ -22,7 +21,6 @@ type LineDatum = {
 
 export function CandlestickChart({
   data,
-  interval,
   showVolume,
   movingAverages,
   visibleWindow,
@@ -34,24 +32,9 @@ export function CandlestickChart({
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const movingAverageRefs = useRef<Array<{ period: number; series: ISeriesApi<"Line"> }>>([]);
   const latestVisibleWindowRef = useRef<string>("");
-  const dataRef = useRef<CandlePoint[]>(data);
-  const intervalRef = useRef(interval);
-  const visibleWindowChangeRef = useRef(onVisibleWindowChange);
   const suppressNextVisibleEventRef = useRef(false);
 
-  useEffect(() => {
-    dataRef.current = data;
-  }, [data]);
-
-  useEffect(() => {
-    visibleWindowChangeRef.current = onVisibleWindowChange;
-  }, [onVisibleWindowChange]);
-
-  useEffect(() => {
-    intervalRef.current = interval;
-  }, [interval]);
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = containerRef.current;
 
     if (!container) {
@@ -127,7 +110,7 @@ export function CandlestickChart({
     });
 
     const handleVisibleRangeChange = (range: LogicalRange | null) => {
-      if (!visibleWindowChangeRef.current || !range || dataRef.current.length === 0) {
+      if (!onVisibleWindowChange || !range || data.length === 0) {
         return;
       }
 
@@ -136,11 +119,11 @@ export function CandlestickChart({
         return;
       }
 
-      const startIndex = clampIndex(Math.floor(range.from), dataRef.current.length);
-      const endIndex = clampIndex(Math.ceil(range.to), dataRef.current.length);
+      const startIndex = clampIndex(Math.floor(range.from), data.length);
+      const endIndex = clampIndex(Math.ceil(range.to), data.length);
       const nextWindow = {
-        start: dataRef.current[startIndex]?.time ?? null,
-        end: dataRef.current[endIndex]?.time ?? null,
+        start: data[startIndex]?.time ?? null,
+        end: data[endIndex]?.time ?? null,
       };
       const signature = `${nextWindow.start ?? ""}:${nextWindow.end ?? ""}`;
 
@@ -149,7 +132,7 @@ export function CandlestickChart({
       }
 
       latestVisibleWindowRef.current = signature;
-      visibleWindowChangeRef.current(nextWindow);
+      onVisibleWindowChange(nextWindow);
     };
 
     chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
@@ -176,24 +159,15 @@ export function CandlestickChart({
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
     };
-  }, []);
+  }, [data, onVisibleWindowChange]);
 
-  useEffect(() => {
-    chartRef.current?.applyOptions({
-      timeScale: {
-        timeVisible: false,
-        secondsVisible: false,
-      },
-    });
-  }, [interval]);
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!chartRef.current || !candleSeriesRef.current || !volumeSeriesRef.current) {
       return;
     }
 
     const candles = data.map((point) => ({
-      time: toChartTime(point.time, interval),
+      time: toChartTime(point.time),
       open: point.open,
       high: point.high,
       low: point.low,
@@ -201,42 +175,25 @@ export function CandlestickChart({
     }));
 
     const volumes = data.map((point) => ({
-      time: toChartTime(point.time, interval),
+      time: toChartTime(point.time),
       value: point.volume,
       color: point.close >= point.open ? "rgba(76, 225, 143, 0.35)" : "rgba(255, 122, 120, 0.35)",
     }));
 
     candleSeriesRef.current.setData(candles);
     volumeSeriesRef.current.setData(showVolume ? volumes : []);
-
-    syncMovingAverages(chartRef.current, movingAverageRefs, data, interval, movingAverages);
-  }, [data, interval, movingAverages, showVolume]);
-
-  useEffect(() => {
-    if (!chartRef.current) {
-      return;
-    }
-
-    if (data.length === 0) {
-      chartRef.current.timeScale().fitContent();
-      return;
-    }
+    syncMovingAverages(chartRef.current, movingAverageRefs, data, movingAverages);
 
     const nextRange = resolveLogicalRange(data, visibleWindow);
 
-    if (!nextRange) {
-      suppressNextVisibleEventRef.current = true;
-      chartRef.current.timeScale().fitContent();
-      return;
-    }
-
     suppressNextVisibleEventRef.current = true;
-    const frame = requestAnimationFrame(() => {
-      chartRef.current?.timeScale().setVisibleLogicalRange(nextRange);
-    });
 
-    return () => cancelAnimationFrame(frame);
-  }, [data, visibleWindow]);
+    if (nextRange) {
+      chartRef.current.timeScale().setVisibleLogicalRange(nextRange);
+    } else {
+      chartRef.current.timeScale().fitContent();
+    }
+  }, [data, movingAverages, showVolume, visibleWindow]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 }
@@ -245,7 +202,6 @@ function syncMovingAverages(
   chart: IChartApi,
   refs: MutableRefObject<Array<{ period: number; series: ISeriesApi<"Line"> }>>,
   data: CandlePoint[],
-  interval: string,
   periods: number[],
 ) {
   const current = new Map(refs.current.map((item) => [item.period, item.series]));
@@ -263,7 +219,7 @@ function syncMovingAverages(
         crosshairMarkerVisible: false,
       });
 
-    series.setData(computeMovingAverage(data, period, interval));
+    series.setData(computeMovingAverage(data, period));
     nextItems.push({ period, series });
     current.delete(period);
   }
@@ -272,14 +228,14 @@ function syncMovingAverages(
   refs.current = nextItems;
 }
 
-function computeMovingAverage(data: CandlePoint[], period: number, interval: string): LineDatum[] {
+function computeMovingAverage(data: CandlePoint[], period: number): LineDatum[] {
   const result: LineDatum[] = [];
 
   for (let index = period - 1; index < data.length; index += 1) {
     const window = data.slice(index - period + 1, index + 1);
     const sum = window.reduce((total, point) => total + point.close, 0);
     result.push({
-      time: toChartTime(data[index].time, interval),
+      time: toChartTime(data[index].time),
       value: sum / period,
     });
   }
@@ -288,26 +244,22 @@ function computeMovingAverage(data: CandlePoint[], period: number, interval: str
 }
 
 function resolveLogicalRange(data: CandlePoint[], visibleWindow: VisibleWindowRequest) {
-  if (data.length === 0) {
+  if (data.length === 0 || !visibleWindow.start || !visibleWindow.end) {
     return null;
-  }
-
-  if (!visibleWindow.start || !visibleWindow.end) {
-    return { from: 0, to: data.length - 1 + 0.5 };
   }
 
   const normalizedStart = toWindowTimestamp(visibleWindow.start, true);
   const normalizedEnd = toWindowTimestamp(visibleWindow.end, false);
 
   if (normalizedStart === null || normalizedEnd === null) {
-    return { from: 0, to: data.length - 1 + 0.5 };
+    return null;
   }
 
   const fromIndex = findFirstIndexOnOrAfter(data, normalizedStart);
   const toIndex = findLastIndexOnOrBefore(data, normalizedEnd);
 
   if (fromIndex > toIndex) {
-    return { from: 0, to: data.length - 1 + 0.5 };
+    return null;
   }
 
   return {
@@ -380,6 +332,6 @@ function movingAverageColor(period: number) {
   return "#c293ff";
 }
 
-function toChartTime(value: string, interval: string): Time {
+function toChartTime(value: string): Time {
   return value.slice(0, 10) as Time;
 }
