@@ -37,6 +37,7 @@ export function CandlestickChart({
   const dataRef = useRef<CandlePoint[]>(data);
   const intervalRef = useRef(interval);
   const visibleWindowChangeRef = useRef(onVisibleWindowChange);
+  const suppressNextVisibleEventRef = useRef(false);
 
   useEffect(() => {
     dataRef.current = data;
@@ -130,6 +131,11 @@ export function CandlestickChart({
         return;
       }
 
+      if (suppressNextVisibleEventRef.current) {
+        suppressNextVisibleEventRef.current = false;
+        return;
+      }
+
       const startIndex = clampIndex(Math.floor(range.from), dataRef.current.length);
       const endIndex = clampIndex(Math.ceil(range.to), dataRef.current.length);
       const nextWindow = {
@@ -219,10 +225,12 @@ export function CandlestickChart({
     const nextRange = resolveLogicalRange(data, visibleWindow);
 
     if (!nextRange) {
+      suppressNextVisibleEventRef.current = true;
       chartRef.current.timeScale().fitContent();
       return;
     }
 
+    suppressNextVisibleEventRef.current = true;
     chartRef.current.timeScale().setVisibleLogicalRange(nextRange);
   }, [data, visibleWindow]);
 
