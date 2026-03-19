@@ -48,6 +48,7 @@ export function StockDashboard() {
 
   useEffect(() => {
     const controller = new AbortController();
+
     async function runSearch() {
       if (!deferredQuery || deferredQuery.toUpperCase() === selectedSymbol.toUpperCase()) {
         return;
@@ -187,7 +188,7 @@ export function StockDashboard() {
         <section className={styles.hero}>
           <div className={styles.heroGrid}>
             <div>
-              <h1 className={styles.heroTitle}>一页里自由拖、自由缩、自由选时间范围看全球行情</h1>
+              <h1 className={styles.heroTitle}>一页里自由拖动、缩放和切换时间范围，查看全球市场行情</h1>
             </div>
             <aside className={styles.guideCard}>
               <h2>常用代码示例</h2>
@@ -222,7 +223,7 @@ export function StockDashboard() {
 
                   {showSearchResults && (searchResults.length > 0 || searchLoading) && (
                     <div className={styles.results}>
-                      {searchLoading && <div className={styles.subtle}>正在搜索…</div>}
+                      {searchLoading && <div className={styles.subtle}>正在搜索...</div>}
                       {searchResults.map((result) => (
                         <button
                           key={`${result.symbol}-${result.exchange}`}
@@ -356,13 +357,12 @@ export function StockDashboard() {
                 </div>
               </div>
 
-              {chartData?.note && <p className={styles.note}>{chartData.note}</p>}
               {chartError && <p className={styles.note}>{chartError}</p>}
 
               <div className={styles.chartSurface}>
                 {chartLoading || !chartData ? (
                   <div className={styles.panel}>
-                    <p className={styles.panelText}>正在加载 {selectedSymbol} 的图表数据…</p>
+                    <p className={styles.panelText}>正在加载 {selectedSymbol} 的图表数据...</p>
                   </div>
                 ) : chartData.points.length === 0 ? (
                   <div className={styles.panel}>
@@ -401,21 +401,6 @@ export function StockDashboard() {
                   清空自选
                 </button>
               </div>
-            </section>
-
-            <section className={styles.panel}>
-              <h2 className={styles.sectionTitle}>这版已经支持什么</h2>
-              <p className={styles.panelText}>
-                1. 可搜索和直接输入全球常见行情代码。
-                <br />
-                2. 可用预设区间快速跳到 1 个月到最大范围。
-                <br />
-                3. 可手动选择开始和结束日期查看任意历史窗口。
-                <br />
-                4. 图表原生支持手势缩放、鼠标滚轮缩放和横向拖动。
-                <br />
-                5. 提供分时、日K、周K、月K，以及 MA 和成交量。
-              </p>
             </section>
           </aside>
         </div>

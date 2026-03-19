@@ -64,8 +64,18 @@ export function CandlestickChart({
         vertLine: { color: "rgba(89, 199, 255, 0.4)" },
         horzLine: { color: "rgba(89, 199, 255, 0.4)" },
       },
-      handleScroll: true,
-      handleScale: true,
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: true,
+        axisDoubleClickReset: true,
+      },
     });
 
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
