@@ -96,12 +96,13 @@ export function StockDashboard() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const cached = chartCacheRef.current.get(chartCacheKey);
+    const cached = chartCacheRef.current.get(chartCacheKey) ?? null;
+    const fetchWindow = getFetchWindow(interval, visibleWindowRequest, cached);
 
     setVisibleWindow(null);
     setChartError(null);
 
-    if (cached) {
+    if (cached && !fetchWindow) {
       setChartData(cached);
       setChartLoading(false);
       return () => controller.abort();
@@ -111,10 +112,17 @@ export function StockDashboard() {
       setChartLoading(true);
 
       try {
-        const response = await fetch(
-          `/api/chart?symbol=${encodeURIComponent(selectedSymbol)}&interval=${encodeURIComponent(interval)}`,
-          { signal: controller.signal },
-        );
+        const params = new URLSearchParams({
+          symbol: selectedSymbol,
+          interval,
+        });
+
+        if (fetchWindow?.start && fetchWindow?.end) {
+          params.set("start", fetchWindow.start);
+          params.set("end", fetchWindow.end);
+        }
+
+        const response = await fetch(`/api/chart?${params.toString()}`, { signal: controller.signal });
         const payload = (await response.json()) as ChartPayload & { error?: string };
 
         if (!response.ok) {
@@ -137,7 +145,7 @@ export function StockDashboard() {
     void loadChart();
 
     return () => controller.abort();
-  }, [chartCacheKey, interval, selectedSymbol]);
+  }, [chartCacheKey, interval, selectedSymbol, visibleWindowRequest]);
 
   useEffect(() => {
     if (!chartData) {
@@ -538,6 +546,62 @@ function MetricItem({ label, value }: { label: string; value: string }) {
   );
 }
 
+function getFetchWindow(interval: ChartInterval, requestedWindow: VisibleWindow, cached: ChartPayload | null) {
+  if (interval === "1wk" || interval === "1mo") {
+    return cached ? null : { start: null, end: null };
+  }
+
+  const normalized = normalizeRequestedWindow(requestedWindow);
+
+  if (!normalized) {
+    return cached ? null : { start: null, end: null };
+  }
+
+  if (cached && cacheCoversWindow(cached, normalized)) {
+    return null;
+  }
+
+  if (interval === "5m") {
+    return {
+      start: shiftDate(normalized.end, -59),
+      end: normalized.end,
+    };
+  }
+
+  const spanDays = Math.max(30, diffDays(normalized.start, normalized.end));
+  const bufferDays = Math.max(rangePresetDays("5y"), spanDays * 4);
+  const desiredStart = shiftDate(normalized.end, -bufferDays);
+  const cacheStart = cached ? toInputDate(cached.points[0]?.time ?? null) : "";
+  const cacheEnd = cached ? toInputDate(cached.points.at(-1)?.time ?? null) : "";
+
+  return {
+    start: cacheStart ? (desiredStart < cacheStart ? desiredStart : cacheStart) : desiredStart,
+    end: cacheEnd && cacheEnd > normalized.end ? cacheEnd : normalized.end,
+  };
+}
+
+function normalizeRequestedWindow(window: VisibleWindow) {
+  if (!window.start || !window.end) {
+    return null;
+  }
+
+  const start = toInputDate(window.start);
+  const end = toInputDate(window.end);
+
+  return normalizeDateInputs(start, end);
+}
+
+function cacheCoversWindow(chartData: ChartPayload, requestedWindow: { start: string; end: string }) {
+  const cachedStart = toInputDate(chartData.points[0]?.time ?? null);
+  const cachedEnd = toInputDate(chartData.points.at(-1)?.time ?? null);
+
+  if (!cachedStart || !cachedEnd) {
+    return false;
+  }
+
+  return requestedWindow.start >= cachedStart && requestedWindow.end <= cachedEnd;
+}
+
 function filterVisiblePoints(points: CandlePoint[], window: VisibleWindow) {
   if (!window.start || !window.end) {
     return points;
@@ -633,6 +697,16 @@ function toWindowTimestamp(value: string, isStart: boolean) {
   }
 
   return new Date(value).getTime();
+}
+
+function shiftDate(value: string, deltaDays: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + deltaDays);
+  return date.toISOString().slice(0, 10);
+}
+
+function diffDays(start: string, end: string) {
+  return Math.ceil((new Date(`${end}T00:00:00Z`).getTime() - new Date(`${start}T00:00:00Z`).getTime()) / 86400000);
 }
 
 function maxPointValue(points: CandlePoint[], field: "high" | "open" | "close") {

@@ -60,7 +60,7 @@ const PRESET_TO_DAYS: Record<Exclude<RangePreset, "max">, number> = {
 
 const FETCH_RANGE_BY_INTERVAL: Record<ChartInterval, string> = {
   "5m": "60d",
-  "1d": "max",
+  "1d": "5y",
   "1wk": "max",
   "1mo": "max",
 };
@@ -135,14 +135,21 @@ export async function getChartData(input: {
   start: string | null;
   end: string | null;
 }) {
+  const fetchWindow = resolveFetchWindow(input.interval, input.start, input.end);
   const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(input.symbol)}`);
 
   url.searchParams.set("interval", input.interval);
-  url.searchParams.set("range", FETCH_RANGE_BY_INTERVAL[input.interval]);
   url.searchParams.set("includePrePost", "false");
   url.searchParams.set("events", "div,splits,capitalGains");
   url.searchParams.set("lang", "en-US");
   url.searchParams.set("region", "US");
+
+  if (fetchWindow.start && fetchWindow.end) {
+    url.searchParams.set("period1", String(Math.floor(new Date(`${fetchWindow.start}T00:00:00Z`).getTime() / 1000)));
+    url.searchParams.set("period2", String(Math.floor(new Date(`${fetchWindow.end}T23:59:59Z`).getTime() / 1000)));
+  } else {
+    url.searchParams.set("range", FETCH_RANGE_BY_INTERVAL[input.interval]);
+  }
 
   const response = await fetch(url, {
     headers: DEFAULT_HEADERS,
@@ -180,7 +187,7 @@ export async function getChartData(input: {
     end: input.end,
     effectiveStart: points[0]?.time ?? null,
     effectiveEnd: points.at(-1)?.time ?? null,
-    note: input.interval === "5m" ? "5 分钟数据通常只提供最近约 60 天，缩放时会使用完整可用窗口。" : null,
+    note: fetchWindow.note,
     snapshot: toSnapshot(result.meta, points, input.interval),
     points,
   };
@@ -218,6 +225,38 @@ function normalizeDateInput(value: string | null) {
   }
 
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+function resolveFetchWindow(interval: ChartInterval, start: string | null, end: string | null) {
+  if (interval === "5m") {
+    const normalizedEnd = end ?? new Date().toISOString().slice(0, 10);
+    const maxStart = shiftDate(normalizedEnd, -59);
+    const normalizedStart = start && start > maxStart ? start : maxStart;
+
+    return {
+      start: normalizedStart,
+      end: normalizedEnd,
+      note: "5 分钟数据通常只提供最近约 60 天，缩放时会使用完整可用窗口。",
+    };
+  }
+
+  if (start && end) {
+    if (start <= end) {
+      return { start, end, note: null };
+    }
+
+    return {
+      start: end,
+      end: start,
+      note: "开始日期晚于结束日期，已自动交换。",
+    };
+  }
+
+  return {
+    start: null,
+    end: null,
+    note: interval === "1d" ? "日线会优先拉取近 5 年完整数据作为缩放缓冲。" : null,
+  };
 }
 
 function toSnapshot(meta: YahooChartMeta | undefined, points: CandlePoint[], interval: ChartInterval): AssetSnapshot {
@@ -313,4 +352,10 @@ function minValue(points: CandlePoint[], field: "low" | "open" | "close") {
   }
 
   return Math.min(...points.map((point) => point[field]));
+}
+
+function shiftDate(value: string, deltaDays: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + deltaDays);
+  return date.toISOString().slice(0, 10);
 }
