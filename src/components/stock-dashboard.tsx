@@ -31,7 +31,7 @@ export function StockDashboard() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [showVolume, setShowVolume] = useState(true);
-  const [movingAverages, setMovingAverages] = useState<number[]>([5, 20, 60]);
+  const [movingAverages, setMovingAverages] = useState<number[]>([5]);
   const [watchlist, setWatchlist] = useState<string[]>(() => loadWatchlist());
   const deferredQuery = useDeferredValue(draftSymbol.trim());
 
@@ -162,9 +162,17 @@ export function StockDashboard() {
   }
 
   function toggleMovingAverage(period: number) {
-    setMovingAverages((current) =>
-      current.includes(period) ? current.filter((item) => item !== period) : [...current, period].sort((a, b) => a - b),
-    );
+    setMovingAverages((current) => {
+      if (current.includes(period)) {
+        if (current.length === 1) {
+          return current;
+        }
+
+        return current.filter((item) => item !== period);
+      }
+
+      return [...current, period].sort((a, b) => a - b);
+    });
   }
 
   function toggleWatchlist() {
