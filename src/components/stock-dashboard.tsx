@@ -512,7 +512,6 @@ export function StockDashboard() {
           </div>
 
           {chartError && <p className={styles.note}>{chartError}</p>}
-          {!chartError && chartData?.note && <p className={styles.note}>{chartData.note}</p>}
 
           <div className={styles.chartSurface}>
             {chartData?.points.length ? (

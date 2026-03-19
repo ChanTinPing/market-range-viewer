@@ -33,6 +33,7 @@ export function CandlestickChart({
   const movingAverageRefs = useRef<Array<{ period: number; series: ISeriesApi<"Line"> }>>([]);
   const latestVisibleWindowRef = useRef<string>("");
   const suppressNextVisibleEventRef = useRef(false);
+  const interactiveReadyRef = useRef(false);
   const dataRef = useRef<CandlePoint[]>(data);
   const onVisibleWindowChangeRef = useRef(onVisibleWindowChange);
 
@@ -120,7 +121,7 @@ export function CandlestickChart({
     });
 
     const handleVisibleRangeChange = (range: LogicalRange | null) => {
-      if (!onVisibleWindowChangeRef.current || !range || dataRef.current.length === 0) {
+      if (!onVisibleWindowChangeRef.current || !range || dataRef.current.length === 0 || !interactiveReadyRef.current) {
         return;
       }
 
@@ -176,6 +177,8 @@ export function CandlestickChart({
       return;
     }
 
+    interactiveReadyRef.current = false;
+
     const candles = data.map((point) => ({
       time: toChartTime(point.time),
       open: point.open,
@@ -198,11 +201,21 @@ export function CandlestickChart({
 
     suppressNextVisibleEventRef.current = true;
 
+    let releaseFrame = 0;
+
     if (nextRange) {
       chartRef.current.timeScale().setVisibleLogicalRange(nextRange);
+      latestVisibleWindowRef.current = `${visibleWindow.start ?? ""}:${visibleWindow.end ?? ""}`;
     } else {
       chartRef.current.timeScale().fitContent();
+      latestVisibleWindowRef.current = "";
     }
+
+    releaseFrame = requestAnimationFrame(() => {
+      interactiveReadyRef.current = true;
+    });
+
+    return () => cancelAnimationFrame(releaseFrame);
   }, [data, showVolume, movingAverages, visibleWindow]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
