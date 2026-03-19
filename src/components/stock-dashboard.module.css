@@ -1,6 +1,6 @@
 .page {
   min-height: 100vh;
-  padding: 32px 18px 56px;
+  padding: 24px 18px 56px;
 }
 
 .shell {
@@ -10,85 +10,20 @@
   gap: 22px;
 }
 
-.hero {
-  position: relative;
-  overflow: hidden;
-  padding: 28px;
-  border: 1px solid var(--border);
-  border-radius: 28px;
-  background:
-    linear-gradient(135deg, rgba(89, 199, 255, 0.16), transparent 38%),
-    linear-gradient(160deg, rgba(255, 205, 107, 0.12), transparent 55%),
-    var(--panel-strong);
-  box-shadow: var(--shadow);
-}
-
-.hero::after {
-  content: "";
-  position: absolute;
-  inset: auto -60px -100px auto;
-  width: 260px;
-  height: 260px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(89, 199, 255, 0.28), transparent 65%);
-  pointer-events: none;
-}
-
-.heroTitle {
-  margin: 0;
-  max-width: 1180px;
-  font-size: clamp(2rem, 4vw, 4rem);
-  line-height: 0.98;
-}
-
-.heroGrid {
-  display: block;
-}
-
-.guideCard h2,
-.quoteCard h2,
-.panel h2,
-.sectionTitle {
-  margin: 0 0 12px;
-  font-size: 1rem;
-}
-
-.guideList,
-.watchlist {
+.topGrid {
   display: grid;
-  gap: 10px;
-}
-
-.guideItem,
-.watchButton {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(142, 168, 191, 0.14);
-  background: rgba(255, 255, 255, 0.02);
-  color: var(--text);
-}
-
-.guideItem code,
-.watchButton code {
-  font-family: var(--font-mono), "SFMono-Regular", Consolas, monospace;
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.92fr) minmax(220px, 0.42fr);
+  grid-template-columns: minmax(0, 1.86fr) minmax(220px, 0.54fr);
   gap: 22px;
+  align-items: stretch;
 }
 
-.mainColumn,
+.mainColumn {
+  display: grid;
+  gap: 18px;
+}
+
 .sideColumn {
-  display: grid;
-  gap: 22px;
-  align-content: start;
+  display: flex;
 }
 
 .searchCard,
@@ -103,7 +38,7 @@
 }
 
 .searchCard {
-  padding: 20px;
+  padding: 18px;
 }
 
 .searchRow {
@@ -148,7 +83,6 @@
 .rangeButton:hover,
 .ghostButton:hover,
 .toggle:hover,
-.guideItem:hover,
 .watchButton:hover,
 .hintChip:hover,
 .resultButton:hover {
@@ -187,8 +121,8 @@
 
 .resultMeta,
 .subtle,
-.statsLabel,
-.emptyState {
+.emptyState,
+.metricLabel {
   color: var(--muted);
 }
 
@@ -208,9 +142,9 @@
 }
 
 .quoteCard {
-  padding: 22px;
+  padding: 18px 20px;
   display: grid;
-  gap: 20px;
+  gap: 14px;
 }
 
 .quoteHeader {
@@ -220,9 +154,16 @@
   gap: 14px;
 }
 
+.quoteCard h2,
+.panel h2,
+.sectionTitle {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+
 .symbol {
   margin: 0;
-  font-size: clamp(1.7rem, 3vw, 2.6rem);
+  font-size: clamp(1.5rem, 2.7vw, 2.2rem);
 }
 
 .company {
@@ -234,11 +175,11 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 14px;
+  gap: 12px;
 }
 
 .price {
-  font-size: clamp(2rem, 3vw, 3.2rem);
+  font-size: clamp(1.8rem, 2.8vw, 2.7rem);
   font-weight: 800;
 }
 
@@ -263,28 +204,31 @@
   color: var(--accent);
 }
 
-.quoteGrid {
+.metricsList {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 18px;
+  padding-top: 4px;
 }
 
-.statCard {
-  padding: 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(142, 168, 191, 0.12);
-  background: rgba(255, 255, 255, 0.025);
+.metricItem {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
 }
 
-.statsLabel {
+.metricLabel {
   font-size: 0.82rem;
+  white-space: nowrap;
 }
 
-.statsValue {
-  margin-top: 6px;
+.metricValue {
+  min-width: 0;
   font-size: 0.92rem;
   font-weight: 650;
-  line-height: 1.35;
+  text-align: right;
 }
 
 .chartCard {
@@ -344,7 +288,7 @@
 }
 
 .chartSurface {
-  height: 540px;
+  height: 560px;
   border-radius: 22px;
   border: 1px solid rgba(142, 168, 191, 0.12);
   background:
@@ -363,13 +307,44 @@
 }
 
 .panel {
-  padding: 20px;
+  padding: 18px;
 }
 
 .panelText {
   margin: 0;
   color: var(--muted);
   line-height: 1.7;
+}
+
+.watchPanel {
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.watchlist {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.watchButton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(142, 168, 191, 0.14);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+}
+
+.watchButton code {
+  font-family: var(--font-mono), "SFMono-Regular", Consolas, monospace;
 }
 
 .watchActions {
@@ -383,12 +358,11 @@
 }
 
 @media (max-width: 1120px) {
-  .heroGrid,
-  .layout {
+  .topGrid {
     grid-template-columns: 1fr;
   }
 
-  .quoteGrid {
+  .metricsList {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -402,7 +376,6 @@
     padding: 18px 12px 36px;
   }
 
-  .hero,
   .searchCard,
   .quoteCard,
   .chartCard,
@@ -410,11 +383,10 @@
     border-radius: 22px;
   }
 
-  .searchRow {
-    grid-template-columns: 1fr;
-  }
-
-  .toolbarRow {
+  .searchRow,
+  .toolbarRow,
+  .metricsList,
+  .dateGroup {
     grid-template-columns: 1fr;
   }
 
@@ -426,16 +398,8 @@
     flex-direction: column;
   }
 
-  .quoteGrid {
-    grid-template-columns: 1fr;
-  }
-
   .chartSurface {
-    height: 400px;
-  }
-
-  .dateGroup {
-    grid-template-columns: 1fr;
+    height: 420px;
   }
 
   .watchButton {

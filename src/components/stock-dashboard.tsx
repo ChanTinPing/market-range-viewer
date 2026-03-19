@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useState } from "react";
 import { CandlestickChart } from "@/components/candlestick-chart";
 import styles from "@/components/stock-dashboard.module.css";
 import { DEFAULT_INTERVAL, DEFAULT_RANGE, DEFAULT_SYMBOL, defaultDateRange } from "@/lib/market";
@@ -116,13 +116,6 @@ export function StockDashboard() {
   const change = chartData?.snapshot.change ?? null;
   const changeClass = (change ?? 0) >= 0 ? styles.changePositive : styles.changeNegative;
   const showSearchResults = !!deferredQuery && deferredQuery.toUpperCase() !== selectedSymbol.toUpperCase();
-  const rangeLabel = useMemo(() => {
-    if (startDate && endDate) {
-      return `${startDate} -> ${endDate}`;
-    }
-
-    return range.toUpperCase();
-  }, [endDate, range, startDate]);
 
   function submitSymbol(symbol: string) {
     const nextSymbol = symbol.trim().toUpperCase();
@@ -186,11 +179,7 @@ export function StockDashboard() {
   return (
     <main className={styles.page}>
       <div className={styles.shell}>
-        <section className={styles.hero}>
-          <h1 className={styles.heroTitle}>一页里自由拖动、缩放和切换时间范围，查看全球市场行情</h1>
-        </section>
-
-        <div className={styles.layout}>
+        <section className={styles.topGrid}>
           <div className={styles.mainColumn}>
             <section className={styles.searchCard}>
               <div className={styles.searchRow}>
@@ -261,120 +250,20 @@ export function StockDashboard() {
                 </span>
               </div>
 
-              <div className={styles.quoteGrid}>
-                <StatCard label="查看区间" value={rangeLabel} />
-                <StatCard label="今日开盘" value={formatMaybe(chartData?.snapshot.open)} />
-                <StatCard label="区间最高" value={formatMaybe(chartData?.snapshot.dayHigh)} />
-                <StatCard label="区间最低" value={formatMaybe(chartData?.snapshot.dayLow)} />
-                <StatCard label="昨收" value={formatMaybe(chartData?.snapshot.previousClose)} />
-                <StatCard label="成交量" value={formatVolume(chartData?.snapshot.volume)} />
-                <StatCard label="52周高" value={formatMaybe(chartData?.snapshot.fiftyTwoWeekHigh)} />
-                <StatCard label="52周低" value={formatMaybe(chartData?.snapshot.fiftyTwoWeekLow)} />
-              </div>
-            </section>
-
-            <section className={styles.chartCard}>
-              <div className={styles.toolbar}>
-                <div className={styles.toolbarRow}>
-                  <span className={styles.toolbarLabel}>视图</span>
-                  <div className={styles.toolbarControls}>
-                    {INTERVAL_OPTIONS.map((item) => (
-                      <button
-                        key={item.value}
-                        type="button"
-                        className={`${styles.intervalButton} ${interval === item.value ? styles.active : ""}`}
-                        onClick={() => setInterval(item.value)}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className={styles.toolbarRow}>
-                  <span className={styles.toolbarLabel}>预设时长</span>
-                  <div className={styles.toolbarControls}>
-                    {RANGE_OPTIONS.map((item) => (
-                      <button
-                        key={item}
-                        type="button"
-                        className={`${styles.rangeButton} ${range === item ? styles.active : ""}`}
-                        onClick={() => applyPreset(item)}
-                      >
-                        {item.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className={styles.toolbarRow}>
-                  <span className={styles.toolbarLabel}>自定义</span>
-                  <div className={styles.dateGroup}>
-                    <input className={styles.dateInput} type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-                    <span className={styles.subtle}>到</span>
-                    <input className={styles.dateInput} type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-                    <button type="button" className={styles.primaryButton} onClick={applyCustomDates}>
-                      应用日期
-                    </button>
-                    <button type="button" className={styles.ghostButton} onClick={resetToPreset}>
-                      回到预设
-                    </button>
-                  </div>
-                </div>
-
-                <div className={styles.toolbarRow}>
-                  <span className={styles.toolbarLabel}>指标</span>
-                  <div className={styles.toolbarControls}>
-                    <button
-                      type="button"
-                      className={`${styles.toggle} ${showVolume ? styles.active : ""}`}
-                      onClick={() => setShowVolume((current) => !current)}
-                    >
-                      成交量
-                    </button>
-                    {[5, 20, 60].map((period) => (
-                      <button
-                        key={period}
-                        type="button"
-                        className={`${styles.toggle} ${movingAverages.includes(period) ? styles.active : ""}`}
-                        onClick={() => toggleMovingAverage(period)}
-                      >
-                        MA{period}
-                      </button>
-                    ))}
-                    <button type="button" className={styles.toggle} onClick={toggleWatchlist}>
-                      {isWatched ? "移出自选" : "加入自选"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {chartError && <p className={styles.note}>{chartError}</p>}
-
-              <div className={styles.chartSurface}>
-                {chartLoading || !chartData ? (
-                  <div className={styles.panel}>
-                    <p className={styles.panelText}>正在加载 {selectedSymbol} 的图表数据...</p>
-                  </div>
-                ) : chartData.points.length === 0 ? (
-                  <div className={styles.panel}>
-                    <p className={styles.panelText}>当前条件下没有可显示的数据，请尝试切换周期或时间范围。</p>
-                  </div>
-                ) : (
-                  <CandlestickChart
-                    data={chartData.points}
-                    interval={interval}
-                    showVolume={showVolume}
-                    movingAverages={movingAverages}
-                  />
-                )}
+              <div className={styles.metricsList}>
+                <MetricItem label="今日开盘" value={formatMaybe(chartData?.snapshot.open)} />
+                <MetricItem label="区间最高" value={formatMaybe(chartData?.snapshot.dayHigh)} />
+                <MetricItem label="区间最低" value={formatMaybe(chartData?.snapshot.dayLow)} />
+                <MetricItem label="昨收" value={formatMaybe(chartData?.snapshot.previousClose)} />
+                <MetricItem label="成交量" value={formatVolume(chartData?.snapshot.volume)} />
+                <MetricItem label="52周高" value={formatMaybe(chartData?.snapshot.fiftyTwoWeekHigh)} />
+                <MetricItem label="52周低" value={formatMaybe(chartData?.snapshot.fiftyTwoWeekLow)} />
               </div>
             </section>
           </div>
 
           <aside className={styles.sideColumn}>
-            <section className={styles.panel}>
-              <h2 className={styles.sectionTitle}>自选列表</h2>
+            <section className={`${styles.panel} ${styles.watchPanel}`}>
               {watchlist.length === 0 ? (
                 <p className={styles.emptyState}>还没有加入自选，先选一个品种再点“加入自选”。</p>
               ) : (
@@ -395,17 +284,115 @@ export function StockDashboard() {
               </div>
             </section>
           </aside>
-        </div>
+        </section>
+
+        <section className={styles.chartCard}>
+          <div className={styles.toolbar}>
+            <div className={styles.toolbarRow}>
+              <span className={styles.toolbarLabel}>视图</span>
+              <div className={styles.toolbarControls}>
+                {INTERVAL_OPTIONS.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    className={`${styles.intervalButton} ${interval === item.value ? styles.active : ""}`}
+                    onClick={() => setInterval(item.value)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className={styles.toolbarRow}>
+              <span className={styles.toolbarLabel}>预设时长</span>
+              <div className={styles.toolbarControls}>
+                {RANGE_OPTIONS.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`${styles.rangeButton} ${range === item ? styles.active : ""}`}
+                    onClick={() => applyPreset(item)}
+                  >
+                    {item.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className={styles.toolbarRow}>
+              <span className={styles.toolbarLabel}>自定义</span>
+              <div className={styles.dateGroup}>
+                <input className={styles.dateInput} type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+                <span className={styles.subtle}>到</span>
+                <input className={styles.dateInput} type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+                <button type="button" className={styles.primaryButton} onClick={applyCustomDates}>
+                  应用日期
+                </button>
+                <button type="button" className={styles.ghostButton} onClick={resetToPreset}>
+                  回到预设
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.toolbarRow}>
+              <span className={styles.toolbarLabel}>指标</span>
+              <div className={styles.toolbarControls}>
+                <button
+                  type="button"
+                  className={`${styles.toggle} ${showVolume ? styles.active : ""}`}
+                  onClick={() => setShowVolume((current) => !current)}
+                >
+                  成交量
+                </button>
+                {[5, 20, 60].map((period) => (
+                  <button
+                    key={period}
+                    type="button"
+                    className={`${styles.toggle} ${movingAverages.includes(period) ? styles.active : ""}`}
+                    onClick={() => toggleMovingAverage(period)}
+                  >
+                    MA{period}
+                  </button>
+                ))}
+                <button type="button" className={styles.toggle} onClick={toggleWatchlist}>
+                  {isWatched ? "移出自选" : "加入自选"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {chartError && <p className={styles.note}>{chartError}</p>}
+
+          <div className={styles.chartSurface}>
+            {chartLoading || !chartData ? (
+              <div className={styles.panel}>
+                <p className={styles.panelText}>正在加载 {selectedSymbol} 的图表数据...</p>
+              </div>
+            ) : chartData.points.length === 0 ? (
+              <div className={styles.panel}>
+                <p className={styles.panelText}>当前条件下没有可显示的数据，请尝试切换周期或时间范围。</p>
+              </div>
+            ) : (
+              <CandlestickChart
+                data={chartData.points}
+                interval={interval}
+                showVolume={showVolume}
+                movingAverages={movingAverages}
+              />
+            )}
+          </div>
+        </section>
       </div>
     </main>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function MetricItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className={styles.statCard}>
-      <div className={styles.statsLabel}>{label}</div>
-      <div className={styles.statsValue}>{value}</div>
+    <div className={styles.metricItem}>
+      <span className={styles.metricLabel}>{label}</span>
+      <span className={styles.metricValue}>{value}</span>
     </div>
   );
 }
