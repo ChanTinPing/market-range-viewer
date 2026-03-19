@@ -3,15 +3,14 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { CandlestickSeries, ColorType, HistogramSeries, LineSeries, createChart } from "lightweight-charts";
-import type { IChartApi, ISeriesApi, LogicalRange, Time } from "lightweight-charts";
-import type { CandlePoint, VisibleWindow, VisibleWindowRequest } from "@/lib/market-types";
+import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
+import type { CandlePoint, VisibleWindowRequest } from "@/lib/market-types";
 
 type CandlestickChartProps = {
   data: CandlePoint[];
   showVolume: boolean;
   movingAverages: number[];
   visibleWindow: VisibleWindowRequest;
-  onVisibleWindowChange?: (window: VisibleWindow) => void;
 };
 
 type LineDatum = {
@@ -19,31 +18,13 @@ type LineDatum = {
   value: number;
 };
 
-export function CandlestickChart({
-  data,
-  showVolume,
-  movingAverages,
-  visibleWindow,
-  onVisibleWindowChange,
-}: CandlestickChartProps) {
+export function CandlestickChart({ data, showVolume, movingAverages, visibleWindow }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const movingAverageRefs = useRef<Array<{ period: number; series: ISeriesApi<"Line"> }>>([]);
-  const latestVisibleWindowRef = useRef<string>("");
-  const suppressNextVisibleEventRef = useRef(false);
-  const interactiveReadyRef = useRef(false);
-  const dataRef = useRef<CandlePoint[]>(data);
-  const onVisibleWindowChangeRef = useRef(onVisibleWindowChange);
-
-  useEffect(() => {
-    dataRef.current = data;
-  }, [data]);
-
-  useEffect(() => {
-    onVisibleWindowChangeRef.current = onVisibleWindowChange;
-  }, [onVisibleWindowChange]);
+  const lastAppliedWindowVersionRef = useRef<number>(-1);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -120,34 +101,6 @@ export function CandlestickChart({
       },
     });
 
-    const handleVisibleRangeChange = (range: LogicalRange | null) => {
-      if (!onVisibleWindowChangeRef.current || !range || dataRef.current.length === 0 || !interactiveReadyRef.current) {
-        return;
-      }
-
-      if (suppressNextVisibleEventRef.current) {
-        suppressNextVisibleEventRef.current = false;
-        return;
-      }
-
-      const startIndex = clampIndex(Math.floor(range.from), dataRef.current.length);
-      const endIndex = clampIndex(Math.ceil(range.to), dataRef.current.length);
-      const nextWindow = {
-        start: dataRef.current[startIndex]?.time ?? null,
-        end: dataRef.current[endIndex]?.time ?? null,
-      };
-      const signature = `${nextWindow.start ?? ""}:${nextWindow.end ?? ""}`;
-
-      if (signature === latestVisibleWindowRef.current) {
-        return;
-      }
-
-      latestVisibleWindowRef.current = signature;
-      onVisibleWindowChangeRef.current(nextWindow);
-    };
-
-    chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
-
     chartRef.current = chart;
     candleSeriesRef.current = candlestickSeries;
     volumeSeriesRef.current = volumeSeries;
@@ -162,13 +115,12 @@ export function CandlestickChart({
 
     return () => {
       resizeObserver.disconnect();
-      chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
       movingAverageRefs.current = [];
-      latestVisibleWindowRef.current = "";
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
+      lastAppliedWindowVersionRef.current = -1;
     };
   }, []);
 
@@ -176,8 +128,6 @@ export function CandlestickChart({
     if (!chartRef.current || !candleSeriesRef.current || !volumeSeriesRef.current) {
       return;
     }
-
-    interactiveReadyRef.current = false;
 
     const candles = data.map((point) => ({
       time: toChartTime(point.time),
@@ -196,27 +146,32 @@ export function CandlestickChart({
     candleSeriesRef.current.setData(candles);
     volumeSeriesRef.current.setData(showVolume ? volumes : []);
     syncMovingAverages(chartRef.current, movingAverageRefs, data, movingAverages);
+  }, [data, showVolume, movingAverages]);
 
-    const nextRange = resolveLogicalRange(data, visibleWindow);
-
-    suppressNextVisibleEventRef.current = true;
-
-    let releaseFrame = 0;
-
-    if (nextRange) {
-      chartRef.current.timeScale().setVisibleLogicalRange(nextRange);
-      latestVisibleWindowRef.current = `${visibleWindow.start ?? ""}:${visibleWindow.end ?? ""}`;
-    } else {
-      chartRef.current.timeScale().fitContent();
-      latestVisibleWindowRef.current = "";
+  useEffect(() => {
+    if (!chartRef.current || data.length === 0) {
+      return;
     }
 
-    releaseFrame = requestAnimationFrame(() => {
-      interactiveReadyRef.current = true;
-    });
+    if (lastAppliedWindowVersionRef.current === visibleWindow.version) {
+      return;
+    }
 
-    return () => cancelAnimationFrame(releaseFrame);
-  }, [data, showVolume, movingAverages, visibleWindow]);
+    lastAppliedWindowVersionRef.current = visibleWindow.version;
+    const nextRange = resolveLogicalRange(data, visibleWindow);
+
+    requestAnimationFrame(() => {
+      if (!chartRef.current) {
+        return;
+      }
+
+      if (nextRange) {
+        chartRef.current.timeScale().setVisibleLogicalRange(nextRange);
+      } else {
+        chartRef.current.timeScale().fitContent();
+      }
+    });
+  }, [data, visibleWindow]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 }
@@ -329,10 +284,6 @@ function findLastIndexOnOrBefore(data: CandlePoint[], target: number) {
   }
 
   return answer;
-}
-
-function clampIndex(index: number, length: number) {
-  return Math.min(Math.max(index, 0), length - 1);
 }
 
 function toWindowTimestamp(value: string, isStart: boolean) {

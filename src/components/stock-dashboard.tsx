@@ -188,26 +188,12 @@ export function StockDashboard() {
     });
   }
 
-  function pushVisibleWindow(window: VisibleWindow) {
+  function pushVisibleWindow(window: { start: string | null; end: string | null }) {
     setViewWindow((current) => ({
       start: window.start,
       end: window.end,
       version: current.version + 1,
     }));
-  }
-
-  function handleVisibleWindowChange(window: VisibleWindow) {
-    setViewWindow((current) => {
-      if (current.start === window.start && current.end === window.end) {
-        return current;
-      }
-
-      return {
-        start: window.start,
-        end: window.end,
-        version: current.version,
-      };
-    });
   }
 
   function applyPreset(nextRange: RangePreset) {
@@ -522,7 +508,6 @@ export function StockDashboard() {
                   showVolume={showVolume}
                   movingAverages={movingAverages}
                   visibleWindow={viewWindow}
-                  onVisibleWindowChange={handleVisibleWindowChange}
                 />
                 {chartLoading && (
                   <div className={styles.chartOverlay}>
