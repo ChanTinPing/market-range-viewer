@@ -59,9 +59,8 @@ const PRESET_TO_DAYS: Record<Exclude<RangePreset, "max">, number> = {
 };
 
 const FETCH_RANGE_BY_INTERVAL: Record<ChartInterval, string> = {
-  "5m": "60d",
-  "1d": "5y",
-  "1wk": "max",
+  "1d": "10y",
+  "1wk": "20y",
   "1mo": "max",
 };
 
@@ -210,7 +209,7 @@ export function defaultDateRange(range: RangePreset) {
 }
 
 function validateInterval(value: string | null): ChartInterval {
-  const allowed: ChartInterval[] = ["5m", "1d", "1wk", "1mo"];
+  const allowed: ChartInterval[] = ["1d", "1wk", "1mo"];
   return allowed.includes(value as ChartInterval) ? (value as ChartInterval) : DEFAULT_INTERVAL;
 }
 
@@ -228,34 +227,18 @@ function normalizeDateInput(value: string | null) {
 }
 
 function resolveFetchWindow(interval: ChartInterval, start: string | null, end: string | null) {
-  if (interval === "5m") {
-    const normalizedEnd = end ?? new Date().toISOString().slice(0, 10);
-    const maxStart = shiftDate(normalizedEnd, -59);
-    const normalizedStart = start && start > maxStart ? start : maxStart;
-
-    return {
-      start: normalizedStart,
-      end: normalizedEnd,
-      note: "5 分钟数据通常只提供最近约 60 天，缩放时会使用完整可用窗口。",
-    };
-  }
-
   if (start && end) {
     if (start <= end) {
-      return { start, end, note: null };
+      return buildBufferedWindow(interval, start, end);
     }
 
-    return {
-      start: end,
-      end: start,
-      note: "开始日期晚于结束日期，已自动交换。",
-    };
+    return buildBufferedWindow(interval, end, start, "开始日期晚于结束日期，已自动交换。");
   }
 
   return {
     start: null,
     end: null,
-    note: interval === "1d" ? "日线会优先拉取近 5 年完整数据作为缩放缓冲。" : null,
+    note: defaultFetchNote(interval),
   };
 }
 
@@ -294,12 +277,7 @@ function getLatestSessionPoints(points: CandlePoint[], interval: ChartInterval, 
     return [];
   }
 
-  if (interval !== "5m") {
-    return [points.at(-1) as CandlePoint];
-  }
-
-  const latestSessionKey = toSessionKey(points.at(-1) as CandlePoint, offsetSeconds);
-  return points.filter((point) => toSessionKey(point, offsetSeconds) === latestSessionKey);
+  return [points.at(-1) as CandlePoint];
 }
 
 function toSessionKey(point: CandlePoint, offsetSeconds: number) {
@@ -358,4 +336,32 @@ function shiftDate(value: string, deltaDays: number) {
   const date = new Date(`${value}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + deltaDays);
   return date.toISOString().slice(0, 10);
+}
+
+function buildBufferedWindow(interval: ChartInterval, start: string, end: string, note: string | null = null) {
+  const spanDays = Math.max(30, Math.ceil((new Date(`${end}T00:00:00Z`).getTime() - new Date(`${start}T00:00:00Z`).getTime()) / 86400000));
+  const bufferDays =
+    interval === "1d"
+      ? Math.max(730, spanDays * 3)
+      : interval === "1wk"
+        ? Math.max(365 * 5, spanDays * 5)
+        : Math.max(365 * 12, spanDays * 8);
+
+  return {
+    start: shiftDate(end, -bufferDays),
+    end,
+    note: note ?? defaultFetchNote(interval),
+  };
+}
+
+function defaultFetchNote(interval: ChartInterval) {
+  if (interval === "1d") {
+    return "日线会预取更长历史区间作为缩放缓冲。";
+  }
+
+  if (interval === "1wk") {
+    return "周线会预取更长历史区间，避免被压缩成季度级别。";
+  }
+
+  return "月线会预取更长历史区间，缩放时优先使用缓存数据。";
 }

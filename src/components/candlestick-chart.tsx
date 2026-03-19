@@ -73,7 +73,7 @@ export function CandlestickChart({
       },
       timeScale: {
         borderColor: "rgba(134, 172, 199, 0.15)",
-        timeVisible: intervalRef.current === "5m",
+        timeVisible: false,
         secondsVisible: false,
         rightOffset: 8,
         minBarSpacing: 0.25,
@@ -160,7 +160,7 @@ export function CandlestickChart({
 
     const resizeObserver = new ResizeObserver(() => {
       chart.timeScale().applyOptions({
-        timeVisible: intervalRef.current === "5m",
+        timeVisible: false,
       });
     });
 
@@ -181,7 +181,7 @@ export function CandlestickChart({
   useEffect(() => {
     chartRef.current?.applyOptions({
       timeScale: {
-        timeVisible: interval === "5m",
+        timeVisible: false,
         secondsVisible: false,
       },
     });
@@ -231,7 +231,11 @@ export function CandlestickChart({
     }
 
     suppressNextVisibleEventRef.current = true;
-    chartRef.current.timeScale().setVisibleLogicalRange(nextRange);
+    const frame = requestAnimationFrame(() => {
+      chartRef.current?.timeScale().setVisibleLogicalRange(nextRange);
+    });
+
+    return () => cancelAnimationFrame(frame);
   }, [data, visibleWindow]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
@@ -377,9 +381,5 @@ function movingAverageColor(period: number) {
 }
 
 function toChartTime(value: string, interval: string): Time {
-  if (interval === "5m") {
-    return Math.floor(new Date(value).getTime() / 1000) as Time;
-  }
-
   return value.slice(0, 10) as Time;
 }

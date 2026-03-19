@@ -1,4 +1,4 @@
-export type ChartInterval = "5m" | "1d" | "1wk" | "1mo";
+export type ChartInterval = "1d" | "1wk" | "1mo";
 
 export type RangePreset = "1mo" | "3mo" | "6mo" | "1y" | "3y" | "5y" | "max";
 

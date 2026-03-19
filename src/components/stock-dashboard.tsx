@@ -23,7 +23,6 @@ import type {
 const RANGE_OPTIONS: RangePreset[] = ["1mo", "3mo", "6mo", "1y", "3y", "5y", "max"];
 const MA_PRESETS = [5, 20, 60];
 const INTERVAL_OPTIONS: Array<{ label: string; value: ChartInterval }> = [
-  { label: "分时", value: "5m" },
   { label: "日线", value: "1d" },
   { label: "周线", value: "1wk" },
   { label: "月线", value: "1mo" },
@@ -508,6 +507,7 @@ export function StockDashboard() {
             {chartData?.points.length ? (
               <>
                 <CandlestickChart
+                  key={`${selectedSymbol}-${interval}`}
                   data={chartData.points}
                   interval={interval}
                   showVolume={showVolume}
@@ -547,10 +547,6 @@ function MetricItem({ label, value }: { label: string; value: string }) {
 }
 
 function getFetchWindow(interval: ChartInterval, requestedWindow: VisibleWindow, cached: ChartPayload | null) {
-  if (interval === "1wk" || interval === "1mo") {
-    return cached ? null : { start: null, end: null };
-  }
-
   const normalized = normalizeRequestedWindow(requestedWindow);
 
   if (!normalized) {
@@ -561,15 +557,13 @@ function getFetchWindow(interval: ChartInterval, requestedWindow: VisibleWindow,
     return null;
   }
 
-  if (interval === "5m") {
-    return {
-      start: shiftDate(normalized.end, -59),
-      end: normalized.end,
-    };
-  }
-
   const spanDays = Math.max(30, diffDays(normalized.start, normalized.end));
-  const bufferDays = Math.max(rangePresetDays("5y"), spanDays * 4);
+  const bufferDays =
+    interval === "1d"
+      ? Math.max(365 * 2, spanDays * 3)
+      : interval === "1wk"
+        ? Math.max(365 * 5, spanDays * 5)
+        : Math.max(365 * 12, spanDays * 8);
   const desiredStart = shiftDate(normalized.end, -bufferDays);
   const cacheStart = cached ? toInputDate(cached.points[0]?.time ?? null) : "";
   const cacheEnd = cached ? toInputDate(cached.points.at(-1)?.time ?? null) : "";
