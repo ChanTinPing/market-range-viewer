@@ -17,6 +17,7 @@ type YahooChartMeta = {
   longName?: string;
   currency?: string;
   exchangeName?: string;
+  gmtoffset?: number;
   instrumentType?: string;
   marketState?: string;
   regularMarketPrice?: number;
@@ -57,6 +58,13 @@ const PRESET_TO_DAYS: Record<Exclude<RangePreset, "max">, number> = {
   "5y": 366 * 5,
 };
 
+const FETCH_RANGE_BY_INTERVAL: Record<ChartInterval, string> = {
+  "5m": "60d",
+  "1d": "max",
+  "1wk": "max",
+  "1mo": "max",
+};
+
 export const DEFAULT_SYMBOL = "AAPL";
 export const DEFAULT_RANGE: RangePreset = "1y";
 export const DEFAULT_INTERVAL: ChartInterval = "1d";
@@ -79,6 +87,10 @@ export function getChartQuery(request: NextRequest) {
 
 export function normalizeSymbol(symbol: string | null) {
   return (symbol ?? DEFAULT_SYMBOL).trim().toUpperCase();
+}
+
+export function rangePresetDays(range: Exclude<RangePreset, "max">) {
+  return PRESET_TO_DAYS[range];
 }
 
 export async function searchSymbols(query: string): Promise<SearchResult[]> {
@@ -123,21 +135,14 @@ export async function getChartData(input: {
   start: string | null;
   end: string | null;
 }) {
-  const dates = resolveDateWindow(input.interval, input.range, input.start, input.end);
   const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(input.symbol)}`);
 
   url.searchParams.set("interval", input.interval);
+  url.searchParams.set("range", FETCH_RANGE_BY_INTERVAL[input.interval]);
   url.searchParams.set("includePrePost", "false");
   url.searchParams.set("events", "div,splits,capitalGains");
   url.searchParams.set("lang", "en-US");
   url.searchParams.set("region", "US");
-
-  if (dates.start && dates.end) {
-    url.searchParams.set("period1", String(Math.floor(new Date(`${dates.start}T00:00:00Z`).getTime() / 1000)));
-    url.searchParams.set("period2", String(Math.floor(new Date(`${dates.end}T23:59:59Z`).getTime() / 1000)));
-  } else {
-    url.searchParams.set("range", input.range);
-  }
 
   const response = await fetch(url, {
     headers: DEFAULT_HEADERS,
@@ -165,17 +170,19 @@ export async function getChartData(input: {
     throw new Error("No chart data returned");
   }
 
+  const points = toCandles(result);
+
   return {
     symbol: input.symbol,
     interval: input.interval,
     range: input.range,
     start: input.start,
     end: input.end,
-    effectiveStart: dates.start,
-    effectiveEnd: dates.end,
-    note: dates.note,
-    snapshot: toSnapshot(result.meta, result.indicators?.quote?.[0]),
-    points: toCandles(result),
+    effectiveStart: points[0]?.time ?? null,
+    effectiveEnd: points.at(-1)?.time ?? null,
+    note: input.interval === "5m" ? "5 分钟数据通常只提供最近约 60 天，缩放时会使用完整可用窗口。" : null,
+    snapshot: toSnapshot(result.meta, points, input.interval),
+    points,
   };
 }
 
@@ -184,7 +191,7 @@ export function defaultDateRange(range: RangePreset) {
     return { start: "", end: "" };
   }
 
-  const days = PRESET_TO_DAYS[range];
+  const days = rangePresetDays(range);
   const end = new Date();
   const start = new Date();
   start.setDate(end.getDate() - days);
@@ -213,49 +220,13 @@ function normalizeDateInput(value: string | null) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 }
 
-function resolveDateWindow(interval: ChartInterval, range: RangePreset, start: string | null, end: string | null) {
-  if (!start || !end) {
-    return {
-      start: null,
-      end: null,
-      note: interval === "5m" ? "分时图默认取最近可用窗口，你也可以继续拖拽缩放。" : null,
-    };
-  }
-
-  if (start > end) {
-    return {
-      start: end,
-      end: start,
-      note: "开始日期晚于结束日期，已自动交换。",
-    };
-  }
-
-  if (interval !== "5m") {
-    return { start, end, note: null };
-  }
-
-  const spanDays = Math.ceil((new Date(`${end}T00:00:00Z`).getTime() - new Date(`${start}T00:00:00Z`).getTime()) / 86400000);
-
-  if (spanDays <= 60) {
-    return { start, end, note: null };
-  }
-
-  const clampedStartDate = new Date(`${end}T00:00:00Z`);
-  clampedStartDate.setUTCDate(clampedStartDate.getUTCDate() - 59);
-
-  return {
-    start: clampedStartDate.toISOString().slice(0, 10),
-    end,
-    note: "免费分时数据通常只有最近约 60 天，已自动缩到可用范围。",
-  };
-}
-
-function toSnapshot(meta?: YahooChartMeta, quote?: YahooChartQuote): AssetSnapshot {
-  const closes = quote?.close?.filter((value): value is number => typeof value === "number") ?? [];
-  const latestClose = closes.at(-1) ?? null;
+function toSnapshot(meta: YahooChartMeta | undefined, points: CandlePoint[], interval: ChartInterval): AssetSnapshot {
+  const latestPoint = points.at(-1) ?? null;
+  const latestClose = latestPoint?.close ?? null;
   const previousClose = meta?.previousClose ?? meta?.chartPreviousClose ?? null;
   const change = latestClose !== null && previousClose !== null ? latestClose - previousClose : null;
   const changePercent = change !== null && previousClose ? (change / previousClose) * 100 : null;
+  const latestSession = getLatestSessionPoints(points, interval, meta?.gmtoffset ?? 0);
 
   return {
     symbol: meta?.symbol ?? "",
@@ -269,14 +240,31 @@ function toSnapshot(meta?: YahooChartMeta, quote?: YahooChartQuote): AssetSnapsh
     previousClose,
     change,
     changePercent,
-    dayHigh: maxNumber(quote?.high),
-    dayLow: minNumber(quote?.low),
-    open: firstNumber(quote?.open),
-    volume: lastNumber(quote?.volume),
+    dayHigh: maxValue(latestSession, "high"),
+    dayLow: minValue(latestSession, "low"),
+    open: latestSession[0]?.open ?? null,
+    volume: latestSession.length > 0 ? latestSession.reduce((sum, point) => sum + point.volume, 0) : null,
     fiftyTwoWeekHigh: meta?.fiftyTwoWeekHigh ?? null,
     fiftyTwoWeekLow: meta?.fiftyTwoWeekLow ?? null,
     regularMarketTime: meta?.regularMarketTime ?? null,
   };
+}
+
+function getLatestSessionPoints(points: CandlePoint[], interval: ChartInterval, offsetSeconds: number) {
+  if (points.length === 0) {
+    return [];
+  }
+
+  if (interval !== "5m") {
+    return [points.at(-1) as CandlePoint];
+  }
+
+  const latestSessionKey = toSessionKey(points.at(-1) as CandlePoint, offsetSeconds);
+  return points.filter((point) => toSessionKey(point, offsetSeconds) === latestSessionKey);
+}
+
+function toSessionKey(point: CandlePoint, offsetSeconds: number) {
+  return new Date(new Date(point.time).getTime() + offsetSeconds * 1000).toISOString().slice(0, 10);
 }
 
 function toCandles(result: YahooChartResult): CandlePoint[] {
@@ -311,21 +299,18 @@ function toCandles(result: YahooChartResult): CandlePoint[] {
   });
 }
 
-function firstNumber(values?: Array<number | null>) {
-  return values?.find((value): value is number => typeof value === "number") ?? null;
+function maxValue(points: CandlePoint[], field: "high" | "open" | "close") {
+  if (points.length === 0) {
+    return null;
+  }
+
+  return Math.max(...points.map((point) => point[field]));
 }
 
-function lastNumber(values?: Array<number | null>) {
-  const found = [...(values ?? [])].reverse().find((value): value is number => typeof value === "number");
-  return found ?? null;
-}
+function minValue(points: CandlePoint[], field: "low" | "open" | "close") {
+  if (points.length === 0) {
+    return null;
+  }
 
-function maxNumber(values?: Array<number | null>) {
-  const valid = (values ?? []).filter((value): value is number => typeof value === "number");
-  return valid.length > 0 ? Math.max(...valid) : null;
-}
-
-function minNumber(values?: Array<number | null>) {
-  const valid = (values ?? []).filter((value): value is number => typeof value === "number");
-  return valid.length > 0 ? Math.min(...valid) : null;
+  return Math.min(...points.map((point) => point[field]));
 }

@@ -1,17 +1,32 @@
 "use client";
 
-import { startTransition, useDeferredValue, useEffect, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useRef, useState } from "react";
 import { CandlestickChart } from "@/components/candlestick-chart";
 import styles from "@/components/stock-dashboard.module.css";
-import { DEFAULT_INTERVAL, DEFAULT_RANGE, DEFAULT_SYMBOL, defaultDateRange } from "@/lib/market";
-import type { ChartInterval, ChartPayload, RangePreset, SearchResult } from "@/lib/market-types";
+import {
+  DEFAULT_INTERVAL,
+  DEFAULT_RANGE,
+  DEFAULT_SYMBOL,
+  defaultDateRange,
+  rangePresetDays,
+} from "@/lib/market";
+import type {
+  CandlePoint,
+  ChartInterval,
+  ChartPayload,
+  RangePreset,
+  SearchResult,
+  VisibleWindow,
+  VisibleWindowRequest,
+} from "@/lib/market-types";
 
 const RANGE_OPTIONS: RangePreset[] = ["1mo", "3mo", "6mo", "1y", "3y", "5y", "max"];
+const MA_PRESETS = [5, 20, 60];
 const INTERVAL_OPTIONS: Array<{ label: string; value: ChartInterval }> = [
   { label: "分时", value: "5m" },
-  { label: "日K", value: "1d" },
-  { label: "周K", value: "1wk" },
-  { label: "月K", value: "1mo" },
+  { label: "日线", value: "1d" },
+  { label: "周线", value: "1wk" },
+  { label: "月线", value: "1mo" },
 ];
 const MARKET_GUIDE = ["AAPL", "0700.HK", "5183.KL", "EURUSD=X", "GC=F", "BTC-USD"];
 
@@ -19,12 +34,10 @@ const STORAGE_KEY = "market-range-viewer.watchlist";
 
 export function StockDashboard() {
   const initialDates = defaultDateRange(DEFAULT_RANGE);
+  const chartCacheRef = useRef<Map<string, ChartPayload>>(new Map());
   const [draftSymbol, setDraftSymbol] = useState(DEFAULT_SYMBOL);
   const [selectedSymbol, setSelectedSymbol] = useState(DEFAULT_SYMBOL);
   const [interval, setInterval] = useState<ChartInterval>(DEFAULT_INTERVAL);
-  const [range, setRange] = useState<RangePreset>(DEFAULT_RANGE);
-  const [startDate, setStartDate] = useState(initialDates.start);
-  const [endDate, setEndDate] = useState(initialDates.end);
   const [chartData, setChartData] = useState<ChartPayload | null>(null);
   const [chartError, setChartError] = useState<string | null>(null);
   const [chartLoading, setChartLoading] = useState(true);
@@ -32,8 +45,19 @@ export function StockDashboard() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [showVolume, setShowVolume] = useState(true);
   const [movingAverages, setMovingAverages] = useState<number[]>([5]);
+  const [movingAverageDraft, setMovingAverageDraft] = useState("");
   const [watchlist, setWatchlist] = useState<string[]>(() => loadWatchlist());
+  const [presetSelection, setPresetSelection] = useState<RangePreset>(DEFAULT_RANGE);
+  const [activePreset, setActivePreset] = useState<RangePreset | null>(DEFAULT_RANGE);
+  const [dateInputs, setDateInputs] = useState(initialDates);
+  const [visibleWindowRequest, setVisibleWindowRequest] = useState<VisibleWindowRequest>({
+    start: initialDates.start,
+    end: initialDates.end,
+    version: 0,
+  });
+  const [visibleWindow, setVisibleWindow] = useState<VisibleWindow | null>(null);
   const deferredQuery = useDeferredValue(draftSymbol.trim());
+  const chartCacheKey = `${selectedSymbol}:${interval}`;
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(watchlist));
@@ -44,6 +68,7 @@ export function StockDashboard() {
 
     async function runSearch() {
       if (!deferredQuery || deferredQuery.toUpperCase() === selectedSymbol.toUpperCase()) {
+        setSearchResults([]);
         return;
       }
 
@@ -71,29 +96,32 @@ export function StockDashboard() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const params = new URLSearchParams({
-      symbol: selectedSymbol,
-      interval,
-      range,
-    });
+    const cached = chartCacheRef.current.get(chartCacheKey);
 
-    if (startDate && endDate) {
-      params.set("start", startDate);
-      params.set("end", endDate);
+    setVisibleWindow(null);
+    setChartError(null);
+
+    if (cached) {
+      setChartData(cached);
+      setChartLoading(false);
+      return () => controller.abort();
     }
 
     async function loadChart() {
       setChartLoading(true);
-      setChartError(null);
 
       try {
-        const response = await fetch(`/api/chart?${params.toString()}`, { signal: controller.signal });
+        const response = await fetch(
+          `/api/chart?symbol=${encodeURIComponent(selectedSymbol)}&interval=${encodeURIComponent(interval)}`,
+          { signal: controller.signal },
+        );
         const payload = (await response.json()) as ChartPayload & { error?: string };
 
         if (!response.ok) {
           throw new Error(payload.error ?? "Chart request failed");
         }
 
+        chartCacheRef.current.set(chartCacheKey, payload);
         setChartData(payload);
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -109,13 +137,38 @@ export function StockDashboard() {
     void loadChart();
 
     return () => controller.abort();
-  }, [endDate, interval, range, selectedSymbol, startDate]);
+  }, [chartCacheKey, interval, selectedSymbol]);
+
+  useEffect(() => {
+    if (!chartData) {
+      return;
+    }
+
+    const nextPreset = detectPreset(windowForPreset(visibleWindowRequest, chartData), chartData.points);
+    setActivePreset(nextPreset);
+  }, [chartData, visibleWindowRequest]);
+
+  useEffect(() => {
+    if (!chartData || !visibleWindow?.start || !visibleWindow?.end) {
+      return;
+    }
+
+    const nextInputs = {
+      start: toInputDate(visibleWindow.start),
+      end: toInputDate(visibleWindow.end),
+    };
+
+    setDateInputs((current) => (sameInputWindow(current, nextInputs) ? current : nextInputs));
+    setActivePreset(detectPreset(nextInputs, chartData.points));
+  }, [chartData, visibleWindow]);
 
   const isWatched = watchlist.includes(selectedSymbol);
   const displayName = chartData?.snapshot.longName || chartData?.snapshot.shortName || selectedSymbol;
   const change = chartData?.snapshot.change ?? null;
   const changeClass = (change ?? 0) >= 0 ? styles.changePositive : styles.changeNegative;
   const showSearchResults = !!deferredQuery && deferredQuery.toUpperCase() !== selectedSymbol.toUpperCase();
+  const visiblePoints = chartData ? filterVisiblePoints(chartData.points, visibleWindow ?? visibleWindowRequest) : [];
+  const pointsForMetrics = visiblePoints.length > 0 ? visiblePoints : chartData?.points ?? [];
 
   function submitSymbol(symbol: string) {
     const nextSymbol = symbol.trim().toUpperCase();
@@ -131,41 +184,71 @@ export function StockDashboard() {
     });
   }
 
-  function applyPreset(nextRange: RangePreset) {
-    const nextDates = defaultDateRange(nextRange);
-    setRange(nextRange);
-    setStartDate(nextDates.start);
-    setEndDate(nextDates.end);
+  function pushVisibleWindow(window: VisibleWindow) {
+    setVisibleWindowRequest((current) => ({
+      start: window.start,
+      end: window.end,
+      version: current.version + 1,
+    }));
   }
 
-  function applyCustomDates() {
-    if (!startDate || !endDate) {
+  function applyPreset(nextRange: RangePreset) {
+    setPresetSelection(nextRange);
+
+    if (nextRange === "max" && chartData?.points.length) {
+      const nextWindow = {
+        start: chartData.points[0]?.time ?? null,
+        end: chartData.points.at(-1)?.time ?? null,
+      };
+
+      setActivePreset("max");
+      setDateInputs({
+        start: toInputDate(nextWindow.start),
+        end: toInputDate(nextWindow.end),
+      });
+      pushVisibleWindow(nextWindow);
       return;
     }
 
-    setRange("max");
+    const nextDates = defaultDateRange(nextRange);
+    setActivePreset(nextRange);
+    setDateInputs(nextDates);
+    pushVisibleWindow(nextDates);
+  }
+
+  function applyCustomDates() {
+    const normalized = normalizeDateInputs(dateInputs.start, dateInputs.end);
+
+    if (!normalized) {
+      return;
+    }
+
+    setDateInputs(normalized);
+    setActivePreset(chartData ? detectPreset(normalized, chartData.points) : null);
+    pushVisibleWindow(normalized);
   }
 
   function resetToPreset() {
-    const nextRange = range === "max" ? DEFAULT_RANGE : range;
-    const nextDates = defaultDateRange(nextRange);
-    setRange(nextRange);
-    setStartDate(nextDates.start);
-    setEndDate(nextDates.end);
+    applyPreset(presetSelection);
   }
 
   function toggleMovingAverage(period: number) {
-    setMovingAverages((current) => {
-      if (current.includes(period)) {
-        if (current.length === 1) {
-          return current;
-        }
+    setMovingAverages((current) =>
+      current.includes(period) ? current.filter((item) => item !== period) : [...current, period].sort((a, b) => a - b),
+    );
+  }
 
-        return current.filter((item) => item !== period);
-      }
+  function addMovingAverage() {
+    const nextPeriod = Number(movingAverageDraft);
 
-      return [...current, period].sort((a, b) => a - b);
-    });
+    if (!Number.isInteger(nextPeriod) || nextPeriod < 2 || nextPeriod > 240) {
+      return;
+    }
+
+    setMovingAverages((current) =>
+      current.includes(nextPeriod) ? current : [...current, nextPeriod].sort((a, b) => a - b),
+    );
+    setMovingAverageDraft("");
   }
 
   function toggleWatchlist() {
@@ -237,7 +320,17 @@ export function StockDashboard() {
                   <h2 className={styles.symbol}>{selectedSymbol}</h2>
                   <p className={styles.company}>{displayName}</p>
                 </div>
-                <div className={styles.badge}>{chartData?.snapshot.exchange || "Loading"}</div>
+
+                <div className={styles.quoteActions}>
+                  <button
+                    type="button"
+                    className={`${styles.watchToggle} ${isWatched ? styles.active : ""}`}
+                    onClick={toggleWatchlist}
+                  >
+                    {isWatched ? "已在自选" : "加入自选"}
+                  </button>
+                  <div className={styles.badge}>{chartData?.snapshot.exchange || "Loading"}</div>
+                </div>
               </div>
 
               <div className={styles.priceRow}>
@@ -252,9 +345,9 @@ export function StockDashboard() {
 
               <div className={styles.metricsList}>
                 <MetricItem label="今日开盘" value={formatMaybe(chartData?.snapshot.open)} />
-                <MetricItem label="区间最高" value={formatMaybe(chartData?.snapshot.dayHigh)} />
-                <MetricItem label="区间最低" value={formatMaybe(chartData?.snapshot.dayLow)} />
                 <MetricItem label="昨收" value={formatMaybe(chartData?.snapshot.previousClose)} />
+                <MetricItem label="区间最高" value={formatMaybe(maxPointValue(pointsForMetrics, "high"))} />
+                <MetricItem label="区间最低" value={formatMaybe(minPointValue(pointsForMetrics, "low"))} />
                 <MetricItem label="成交量" value={formatVolume(chartData?.snapshot.volume)} />
                 <MetricItem label="52周高" value={formatMaybe(chartData?.snapshot.fiftyTwoWeekHigh)} />
                 <MetricItem label="52周低" value={formatMaybe(chartData?.snapshot.fiftyTwoWeekLow)} />
@@ -264,8 +357,10 @@ export function StockDashboard() {
 
           <aside className={styles.sideColumn}>
             <section className={`${styles.panel} ${styles.watchPanel}`}>
+              <h2 className={styles.sectionTitle}>自选列表</h2>
+
               {watchlist.length === 0 ? (
-                <p className={styles.emptyState}>还没有加入自选，先选一个品种再点“加入自选”。</p>
+                <p className={styles.emptyState}>还没有加入自选，先选择一个品种再加入到这里。</p>
               ) : (
                 <div className={styles.watchlist}>
                   {watchlist.map((symbol) => (
@@ -311,7 +406,7 @@ export function StockDashboard() {
                   <button
                     key={item}
                     type="button"
-                    className={`${styles.rangeButton} ${range === item ? styles.active : ""}`}
+                    className={`${styles.rangeButton} ${activePreset === item ? styles.active : ""}`}
                     onClick={() => applyPreset(item)}
                   >
                     {item.toUpperCase()}
@@ -323,9 +418,19 @@ export function StockDashboard() {
             <div className={styles.toolbarRow}>
               <span className={styles.toolbarLabel}>自定义</span>
               <div className={styles.dateGroup}>
-                <input className={styles.dateInput} type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+                <input
+                  className={styles.dateInput}
+                  type="date"
+                  value={dateInputs.start}
+                  onChange={(event) => setDateInputs((current) => ({ ...current, start: event.target.value }))}
+                />
                 <span className={styles.subtle}>到</span>
-                <input className={styles.dateInput} type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+                <input
+                  className={styles.dateInput}
+                  type="date"
+                  value={dateInputs.end}
+                  onChange={(event) => setDateInputs((current) => ({ ...current, end: event.target.value }))}
+                />
                 <button type="button" className={styles.primaryButton} onClick={applyCustomDates}>
                   应用日期
                 </button>
@@ -345,7 +450,7 @@ export function StockDashboard() {
                 >
                   成交量
                 </button>
-                {[5, 20, 60].map((period) => (
+                {MA_PRESETS.map((period) => (
                   <button
                     key={period}
                     type="button"
@@ -355,31 +460,67 @@ export function StockDashboard() {
                     MA{period}
                   </button>
                 ))}
-                <button type="button" className={styles.toggle} onClick={toggleWatchlist}>
-                  {isWatched ? "移出自选" : "加入自选"}
-                </button>
+                {movingAverages
+                  .filter((period) => !MA_PRESETS.includes(period))
+                  .map((period) => (
+                    <button
+                      key={period}
+                      type="button"
+                      className={`${styles.toggle} ${styles.customMaChip} ${styles.active}`}
+                      onClick={() => toggleMovingAverage(period)}
+                    >
+                      MA{period}
+                    </button>
+                  ))}
+                <div className={styles.maInputGroup}>
+                  <input
+                    className={styles.maInput}
+                    inputMode="numeric"
+                    value={movingAverageDraft}
+                    placeholder="自定义 MA"
+                    onChange={(event) => setMovingAverageDraft(event.target.value.replace(/[^\d]/g, ""))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        addMovingAverage();
+                      }
+                    }}
+                  />
+                  <button type="button" className={styles.ghostButton} onClick={addMovingAverage}>
+                    添加
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
           {chartError && <p className={styles.note}>{chartError}</p>}
+          {!chartError && chartData?.note && <p className={styles.note}>{chartData.note}</p>}
 
           <div className={styles.chartSurface}>
-            {chartLoading || !chartData ? (
+            {chartData?.points.length ? (
+              <>
+                <CandlestickChart
+                  data={chartData.points}
+                  interval={interval}
+                  showVolume={showVolume}
+                  movingAverages={movingAverages}
+                  visibleWindow={visibleWindowRequest}
+                  onVisibleWindowChange={setVisibleWindow}
+                />
+                {chartLoading && (
+                  <div className={styles.chartOverlay}>
+                    <p className={styles.panelText}>正在更新 {selectedSymbol} 的图表数据...</p>
+                  </div>
+                )}
+              </>
+            ) : chartLoading ? (
               <div className={styles.panel}>
                 <p className={styles.panelText}>正在加载 {selectedSymbol} 的图表数据...</p>
               </div>
-            ) : chartData.points.length === 0 ? (
+            ) : (
               <div className={styles.panel}>
                 <p className={styles.panelText}>当前条件下没有可显示的数据，请尝试切换周期或时间范围。</p>
               </div>
-            ) : (
-              <CandlestickChart
-                data={chartData.points}
-                interval={interval}
-                showVolume={showVolume}
-                movingAverages={movingAverages}
-              />
             )}
           </div>
         </section>
@@ -395,6 +536,119 @@ function MetricItem({ label, value }: { label: string; value: string }) {
       <span className={styles.metricValue}>{value}</span>
     </div>
   );
+}
+
+function filterVisiblePoints(points: CandlePoint[], window: VisibleWindow) {
+  if (!window.start || !window.end) {
+    return points;
+  }
+
+  const start = toWindowTimestamp(window.start, true);
+  const end = toWindowTimestamp(window.end, false);
+
+  if (start === null || end === null) {
+    return points;
+  }
+
+  return points.filter((point) => {
+    const timestamp = new Date(point.time).getTime();
+    return timestamp >= start && timestamp <= end;
+  });
+}
+
+function detectPreset(window: { start: string; end: string } | null, points: CandlePoint[]) {
+  if (!window || points.length === 0) {
+    return null;
+  }
+
+  const availableStart = toInputDate(points[0]?.time ?? null);
+  const availableEnd = toInputDate(points.at(-1)?.time ?? null);
+
+  if (window.start <= availableStart && window.end >= availableEnd) {
+    return "max";
+  }
+
+  const spanDays = Math.max(
+    1,
+    Math.round((new Date(`${window.end}T00:00:00Z`).getTime() - new Date(`${window.start}T00:00:00Z`).getTime()) / 86400000),
+  );
+
+  for (const preset of RANGE_OPTIONS) {
+    if (preset === "max") {
+      continue;
+    }
+
+    const days = rangePresetDays(preset);
+    const drift = Math.abs(spanDays - days) / days;
+
+    if (drift <= 0.14) {
+      return preset;
+    }
+  }
+
+  return null;
+}
+
+function normalizeDateInputs(start: string, end: string) {
+  if (!start || !end) {
+    return null;
+  }
+
+  if (start <= end) {
+    return { start, end };
+  }
+
+  return { start: end, end: start };
+}
+
+function sameInputWindow(left: { start: string; end: string }, right: { start: string; end: string }) {
+  return left.start === right.start && left.end === right.end;
+}
+
+function windowForPreset(window: VisibleWindow, chartData: ChartPayload) {
+  if (window.start && window.end) {
+    return {
+      start: toInputDate(window.start),
+      end: toInputDate(window.end),
+    };
+  }
+
+  return {
+    start: toInputDate(chartData.points[0]?.time ?? null),
+    end: toInputDate(chartData.points.at(-1)?.time ?? null),
+  };
+}
+
+function toInputDate(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  return value.slice(0, 10);
+}
+
+function toWindowTimestamp(value: string, isStart: boolean) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T${isStart ? "00:00:00" : "23:59:59"}Z`).getTime();
+  }
+
+  return new Date(value).getTime();
+}
+
+function maxPointValue(points: CandlePoint[], field: "high" | "open" | "close") {
+  if (points.length === 0) {
+    return null;
+  }
+
+  return Math.max(...points.map((point) => point[field]));
+}
+
+function minPointValue(points: CandlePoint[], field: "low" | "open" | "close") {
+  if (points.length === 0) {
+    return null;
+  }
+
+  return Math.min(...points.map((point) => point[field]));
 }
 
 function formatPrice(value: number | null | undefined, currency?: string) {

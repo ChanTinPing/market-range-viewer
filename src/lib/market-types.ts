@@ -20,6 +20,15 @@ export type CandlePoint = {
   volume: number;
 };
 
+export type VisibleWindow = {
+  start: string | null;
+  end: string | null;
+};
+
+export type VisibleWindowRequest = VisibleWindow & {
+  version: number;
+};
+
 export type AssetSnapshot = {
   symbol: string;
   shortName: string;

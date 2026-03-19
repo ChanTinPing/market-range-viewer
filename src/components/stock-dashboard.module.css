@@ -12,7 +12,7 @@
 
 .topGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1.86fr) minmax(220px, 0.54fr);
+  grid-template-columns: minmax(0, 1.86fr) minmax(240px, 0.58fr);
   gap: 22px;
   align-items: stretch;
 }
@@ -52,7 +52,8 @@
 }
 
 .searchInput,
-.dateInput {
+.dateInput,
+.maInput {
   width: 100%;
   padding: 15px 16px;
   border: 1px solid rgba(142, 168, 191, 0.16);
@@ -65,7 +66,8 @@
 .ghostButton,
 .rangeButton,
 .toggle,
-.intervalButton {
+.intervalButton,
+.watchToggle {
   border: 1px solid transparent;
   transition: 180ms ease;
 }
@@ -84,6 +86,7 @@
 .ghostButton:hover,
 .toggle:hover,
 .watchButton:hover,
+.watchToggle:hover,
 .hintChip:hover,
 .resultButton:hover {
   transform: translateY(-1px);
@@ -142,22 +145,29 @@
 }
 
 .quoteCard {
-  padding: 18px 20px;
+  padding: 22px;
   display: grid;
-  gap: 14px;
+  gap: 18px;
 }
 
 .quoteHeader {
   display: flex;
-  align-items: start;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
+  gap: 18px;
+}
+
+.quoteActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .quoteCard h2,
 .panel h2,
 .sectionTitle {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 1rem;
 }
 
@@ -167,7 +177,7 @@
 }
 
 .company {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   color: var(--muted);
 }
 
@@ -196,39 +206,42 @@
   color: var(--negative);
 }
 
-.badge {
-  padding: 8px 12px;
+.badge,
+.watchToggle {
+  padding: 10px 14px;
   border-radius: 999px;
-  background: rgba(89, 199, 255, 0.08);
   border: 1px solid rgba(89, 199, 255, 0.16);
+  background: rgba(89, 199, 255, 0.08);
   color: var(--accent);
 }
 
 .metricsList {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px 18px;
-  padding-top: 4px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
 }
 
 .metricItem {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 14px 16px;
   min-width: 0;
+  border-radius: 18px;
+  border: 1px solid rgba(142, 168, 191, 0.12);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .metricLabel {
   font-size: 0.82rem;
-  white-space: nowrap;
+  line-height: 1.2;
 }
 
 .metricValue {
   min-width: 0;
-  font-size: 0.92rem;
-  font-weight: 650;
-  text-align: right;
+  font-size: 1.16rem;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .chartCard {
@@ -246,14 +259,14 @@
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);
   gap: 10px;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .toolbarLabel {
   color: var(--muted);
   display: flex;
   align-items: center;
-  align-self: stretch;
+  min-height: 42px;
 }
 
 .toolbarControls {
@@ -287,7 +300,23 @@
   align-items: center;
 }
 
+.maInputGroup {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.maInput {
+  width: 128px;
+  padding: 10px 14px;
+}
+
+.customMaChip {
+  border-style: dashed;
+}
+
 .chartSurface {
+  position: relative;
   height: 560px;
   border-radius: 22px;
   border: 1px solid rgba(142, 168, 191, 0.12);
@@ -295,6 +324,17 @@
     linear-gradient(180deg, rgba(89, 199, 255, 0.03), transparent 28%),
     rgba(2, 9, 16, 0.7);
   overflow: hidden;
+}
+
+.chartOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 18px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(2, 9, 16, 0.24), transparent 32%);
 }
 
 .note {
@@ -321,13 +361,14 @@
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  gap: 14px;
 }
 
 .watchlist {
   display: grid;
   gap: 10px;
   align-content: start;
+  flex: 1;
 }
 
 .watchButton {
@@ -348,7 +389,7 @@
 }
 
 .watchActions {
-  margin-top: 14px;
+  margin-top: auto;
   display: flex;
   gap: 10px;
 }
@@ -360,10 +401,6 @@
 @media (max-width: 1120px) {
   .topGrid {
     grid-template-columns: 1fr;
-  }
-
-  .metricsList {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .dateGroup {
@@ -385,17 +422,19 @@
 
   .searchRow,
   .toolbarRow,
-  .metricsList,
   .dateGroup {
     grid-template-columns: 1fr;
   }
 
-  .toolbarLabel {
-    align-self: auto;
+  .quoteHeader,
+  .quoteActions,
+  .maInputGroup {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .quoteHeader {
-    flex-direction: column;
+  .toolbarLabel {
+    min-height: auto;
   }
 
   .chartSurface {
@@ -403,7 +442,7 @@
   }
 
   .watchButton {
-    align-items: start;
+    align-items: flex-start;
     flex-direction: column;
   }
 }
