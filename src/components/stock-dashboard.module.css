@@ -36,24 +36,13 @@
 
 .heroTitle {
   margin: 0;
-  max-width: 980px;
+  max-width: 1180px;
   font-size: clamp(2rem, 4vw, 4rem);
   line-height: 0.98;
 }
 
 .heroGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
-  gap: 22px;
-  align-items: end;
-}
-
-.guideCard {
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: 22px;
-  background: rgba(6, 18, 29, 0.64);
-  backdrop-filter: blur(10px);
+  display: block;
 }
 
 .guideCard h2,
@@ -91,7 +80,7 @@
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.8fr);
+  grid-template-columns: minmax(0, 1.92fr) minmax(220px, 0.42fr);
   gap: 22px;
 }
 
@@ -99,6 +88,7 @@
 .sideColumn {
   display: grid;
   gap: 22px;
+  align-content: start;
 }
 
 .searchCard,
@@ -309,15 +299,24 @@
 }
 
 .toolbarRow {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
 }
 
 .toolbarLabel {
   color: var(--muted);
-  min-width: 74px;
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+}
+
+.toolbarControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }
 
 .intervalButton,
@@ -338,8 +337,8 @@
 }
 
 .dateGroup {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto auto;
   gap: 10px;
   align-items: center;
 }
@@ -392,6 +391,10 @@
   .quoteGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .dateGroup {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 720px) {
@@ -411,6 +414,14 @@
     grid-template-columns: 1fr;
   }
 
+  .toolbarRow {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbarLabel {
+    align-self: auto;
+  }
+
   .quoteHeader {
     flex-direction: column;
   }
@@ -423,7 +434,10 @@
     height: 400px;
   }
 
-  .guideItem,
+  .dateGroup {
+    grid-template-columns: 1fr;
+  }
+
   .watchButton {
     align-items: start;
     flex-direction: column;

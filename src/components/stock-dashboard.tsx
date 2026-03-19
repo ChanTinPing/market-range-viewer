@@ -13,14 +13,7 @@ const INTERVAL_OPTIONS: Array<{ label: string; value: ChartInterval }> = [
   { label: "周K", value: "1wk" },
   { label: "月K", value: "1mo" },
 ];
-const MARKET_GUIDE = [
-  { label: "美股", symbol: "AAPL" },
-  { label: "港股", symbol: "0700.HK" },
-  { label: "马股", symbol: "5183.KL" },
-  { label: "外汇", symbol: "EURUSD=X" },
-  { label: "黄金", symbol: "GC=F" },
-  { label: "比特币", symbol: "BTC-USD" },
-];
+const MARKET_GUIDE = ["AAPL", "0700.HK", "5183.KL", "EURUSD=X", "GC=F", "BTC-USD"];
 
 const STORAGE_KEY = "market-range-viewer.watchlist";
 
@@ -186,22 +179,7 @@ export function StockDashboard() {
     <main className={styles.page}>
       <div className={styles.shell}>
         <section className={styles.hero}>
-          <div className={styles.heroGrid}>
-            <div>
-              <h1 className={styles.heroTitle}>一页里自由拖动、缩放和切换时间范围，查看全球市场行情</h1>
-            </div>
-            <aside className={styles.guideCard}>
-              <h2>常用代码示例</h2>
-              <div className={styles.guideList}>
-                {MARKET_GUIDE.map((item) => (
-                  <button key={item.symbol} type="button" className={styles.guideItem} onClick={() => submitSymbol(item.symbol)}>
-                    <span>{item.label}</span>
-                    <code>{item.symbol}</code>
-                  </button>
-                ))}
-              </div>
-            </aside>
-          </div>
+          <h1 className={styles.heroTitle}>一页里自由拖动、缩放和切换时间范围，查看全球市场行情</h1>
         </section>
 
         <div className={styles.layout}>
@@ -248,9 +226,9 @@ export function StockDashboard() {
               </div>
 
               <div className={styles.hintRow}>
-                {MARKET_GUIDE.map((item) => (
-                  <button key={item.symbol} type="button" className={styles.hintChip} onClick={() => submitSymbol(item.symbol)}>
-                    {item.symbol}
+                {MARKET_GUIDE.map((symbol) => (
+                  <button key={symbol} type="button" className={styles.hintChip} onClick={() => submitSymbol(symbol)}>
+                    {symbol}
                   </button>
                 ))}
               </div>
@@ -291,30 +269,34 @@ export function StockDashboard() {
               <div className={styles.toolbar}>
                 <div className={styles.toolbarRow}>
                   <span className={styles.toolbarLabel}>视图</span>
-                  {INTERVAL_OPTIONS.map((item) => (
-                    <button
-                      key={item.value}
-                      type="button"
-                      className={`${styles.intervalButton} ${interval === item.value ? styles.active : ""}`}
-                      onClick={() => setInterval(item.value)}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
+                  <div className={styles.toolbarControls}>
+                    {INTERVAL_OPTIONS.map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        className={`${styles.intervalButton} ${interval === item.value ? styles.active : ""}`}
+                        onClick={() => setInterval(item.value)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className={styles.toolbarRow}>
                   <span className={styles.toolbarLabel}>预设时长</span>
-                  {RANGE_OPTIONS.map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      className={`${styles.rangeButton} ${range === item ? styles.active : ""}`}
-                      onClick={() => applyPreset(item)}
-                    >
-                      {item.toUpperCase()}
-                    </button>
-                  ))}
+                  <div className={styles.toolbarControls}>
+                    {RANGE_OPTIONS.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        className={`${styles.rangeButton} ${range === item ? styles.active : ""}`}
+                        onClick={() => applyPreset(item)}
+                      >
+                        {item.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className={styles.toolbarRow}>
@@ -334,26 +316,28 @@ export function StockDashboard() {
 
                 <div className={styles.toolbarRow}>
                   <span className={styles.toolbarLabel}>指标</span>
-                  <button
-                    type="button"
-                    className={`${styles.toggle} ${showVolume ? styles.active : ""}`}
-                    onClick={() => setShowVolume((current) => !current)}
-                  >
-                    成交量
-                  </button>
-                  {[5, 20, 60].map((period) => (
+                  <div className={styles.toolbarControls}>
                     <button
-                      key={period}
                       type="button"
-                      className={`${styles.toggle} ${movingAverages.includes(period) ? styles.active : ""}`}
-                      onClick={() => toggleMovingAverage(period)}
+                      className={`${styles.toggle} ${showVolume ? styles.active : ""}`}
+                      onClick={() => setShowVolume((current) => !current)}
                     >
-                      MA{period}
+                      成交量
                     </button>
-                  ))}
-                  <button type="button" className={styles.toggle} onClick={toggleWatchlist}>
-                    {isWatched ? "移出自选" : "加入自选"}
-                  </button>
+                    {[5, 20, 60].map((period) => (
+                      <button
+                        key={period}
+                        type="button"
+                        className={`${styles.toggle} ${movingAverages.includes(period) ? styles.active : ""}`}
+                        onClick={() => toggleMovingAverage(period)}
+                      >
+                        MA{period}
+                      </button>
+                    ))}
+                    <button type="button" className={styles.toggle} onClick={toggleWatchlist}>
+                      {isWatched ? "移出自选" : "加入自选"}
+                    </button>
+                  </div>
                 </div>
               </div>
 
