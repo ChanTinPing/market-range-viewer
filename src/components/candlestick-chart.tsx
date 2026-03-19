@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { CandlestickSeries, ColorType, HistogramSeries, LineSeries, createChart } from "lightweight-charts";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
@@ -24,7 +24,8 @@ export function CandlestickChart({ data, showVolume, movingAverages, visibleWind
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const movingAverageRefs = useRef<Array<{ period: number; series: ISeriesApi<"Line"> }>>([]);
-  const lastAppliedWindowVersionRef = useRef<number>(-1);
+  const lastAppliedWindowRef = useRef<{ version: number; dataSignature: string } | null>(null);
+  const lastRenderedDataSignatureRef = useRef<string>("");
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -120,7 +121,8 @@ export function CandlestickChart({ data, showVolume, movingAverages, visibleWind
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
-      lastAppliedWindowVersionRef.current = -1;
+      lastAppliedWindowRef.current = null;
+      lastRenderedDataSignatureRef.current = "";
     };
   }, []);
 
@@ -129,6 +131,7 @@ export function CandlestickChart({ data, showVolume, movingAverages, visibleWind
       return;
     }
 
+    const chart = chartRef.current;
     const candles = data.map((point) => ({
       time: toChartTime(point.time),
       open: point.open,
@@ -145,33 +148,46 @@ export function CandlestickChart({ data, showVolume, movingAverages, visibleWind
 
     candleSeriesRef.current.setData(candles);
     volumeSeriesRef.current.setData(showVolume ? volumes : []);
-    syncMovingAverages(chartRef.current, movingAverageRefs, data, movingAverages);
-  }, [data, showVolume, movingAverages]);
+    syncMovingAverages(chart, movingAverageRefs, data, movingAverages);
 
-  useEffect(() => {
-    if (!chartRef.current || data.length === 0) {
+    const dataSignature = getDataSignature(data);
+    const dataChanged = lastRenderedDataSignatureRef.current !== dataSignature;
+
+    if (dataChanged) {
+      chart.timeScale().fitContent();
+      lastRenderedDataSignatureRef.current = dataSignature;
+    }
+
+    if (data.length === 0) {
+      lastAppliedWindowRef.current = {
+        version: visibleWindow.version,
+        dataSignature,
+      };
       return;
     }
 
-    if (lastAppliedWindowVersionRef.current === visibleWindow.version) {
+    const shouldApplyVisibleWindow =
+      !lastAppliedWindowRef.current ||
+      lastAppliedWindowRef.current.version !== visibleWindow.version ||
+      lastAppliedWindowRef.current.dataSignature !== dataSignature;
+
+    if (!shouldApplyVisibleWindow) {
       return;
     }
 
-    lastAppliedWindowVersionRef.current = visibleWindow.version;
     const nextRange = resolveLogicalRange(data, visibleWindow);
 
-    requestAnimationFrame(() => {
-      if (!chartRef.current) {
-        return;
-      }
+    if (nextRange) {
+      chart.timeScale().setVisibleLogicalRange(nextRange);
+    } else {
+      chart.timeScale().fitContent();
+    }
 
-      if (nextRange) {
-        chartRef.current.timeScale().setVisibleLogicalRange(nextRange);
-      } else {
-        chartRef.current.timeScale().fitContent();
-      }
-    });
-  }, [data, visibleWindow]);
+    lastAppliedWindowRef.current = {
+      version: visibleWindow.version,
+      dataSignature,
+    };
+  }, [data, movingAverages, showVolume, visibleWindow]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 }
@@ -308,4 +324,12 @@ function movingAverageColor(period: number) {
 
 function toChartTime(value: string): Time {
   return value.slice(0, 10) as Time;
+}
+
+function getDataSignature(data: CandlePoint[]) {
+  if (data.length === 0) {
+    return "empty";
+  }
+
+  return `${data.length}:${data[0]?.time ?? ""}:${data.at(-1)?.time ?? ""}`;
 }

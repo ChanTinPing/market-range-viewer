@@ -56,6 +56,8 @@ export function StockDashboard() {
   });
   const deferredQuery = useDeferredValue(draftSymbol.trim());
   const chartCacheKey = `${selectedSymbol}:${interval}`;
+  const currentChartData =
+    chartData && chartData.symbol === selectedSymbol && chartData.interval === interval ? chartData : null;
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(watchlist));
@@ -94,6 +96,7 @@ export function StockDashboard() {
 
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
     const cached = chartCacheRef.current.get(chartCacheKey) ?? null;
     const fetchWindow = getFetchWindow(interval, viewWindow, cached);
     setChartError(null);
@@ -101,8 +104,13 @@ export function StockDashboard() {
     if (cached && !fetchWindow) {
       setChartData(cached);
       setChartLoading(false);
-      return () => controller.abort();
+      return () => {
+        active = false;
+        controller.abort();
+      };
     }
+
+    setChartData(cached);
 
     async function loadChart() {
       setChartLoading(true);
@@ -125,6 +133,10 @@ export function StockDashboard() {
           throw new Error(payload.error ?? "Chart request failed");
         }
 
+        if (!active) {
+          return;
+        }
+
         chartCacheRef.current.set(chartCacheKey, payload);
         setChartData(payload);
       } catch (error: unknown) {
@@ -134,26 +146,31 @@ export function StockDashboard() {
 
         setChartError(error instanceof Error ? error.message : "加载行情失败");
       } finally {
-        setChartLoading(false);
+        if (active) {
+          setChartLoading(false);
+        }
       }
     }
 
     void loadChart();
 
-    return () => controller.abort();
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [chartCacheKey, interval, selectedSymbol, viewWindow]);
 
   useEffect(() => {
-    if (!chartData) {
+    if (!currentChartData) {
       return;
     }
 
-    const nextPreset = detectPreset(windowForPreset(viewWindow, chartData), chartData.points);
+    const nextPreset = detectPreset(windowForPreset(viewWindow, currentChartData), currentChartData.points);
     setActivePreset(nextPreset);
-  }, [chartData, viewWindow]);
+  }, [currentChartData, viewWindow]);
 
   useEffect(() => {
-    if (!chartData || !viewWindow.start || !viewWindow.end) {
+    if (!currentChartData || !viewWindow.start || !viewWindow.end) {
       return;
     }
 
@@ -163,16 +180,16 @@ export function StockDashboard() {
     };
 
     setDateInputs((current) => (sameInputWindow(current, nextInputs) ? current : nextInputs));
-    setActivePreset(detectPreset(nextInputs, chartData.points));
-  }, [chartData, viewWindow]);
+    setActivePreset(detectPreset(nextInputs, currentChartData.points));
+  }, [currentChartData, viewWindow]);
 
   const isWatched = watchlist.includes(selectedSymbol);
-  const displayName = chartData?.snapshot.longName || chartData?.snapshot.shortName || selectedSymbol;
-  const change = chartData?.snapshot.change ?? null;
+  const displayName = currentChartData?.snapshot.longName || currentChartData?.snapshot.shortName || selectedSymbol;
+  const change = currentChartData?.snapshot.change ?? null;
   const changeClass = (change ?? 0) >= 0 ? styles.changePositive : styles.changeNegative;
   const showSearchResults = !!deferredQuery && deferredQuery.toUpperCase() !== selectedSymbol.toUpperCase();
-  const visiblePoints = chartData ? filterVisiblePoints(chartData.points, viewWindow) : [];
-  const pointsForMetrics = visiblePoints.length > 0 ? visiblePoints : chartData?.points ?? [];
+  const visiblePoints = currentChartData ? filterVisiblePoints(currentChartData.points, viewWindow) : [];
+  const pointsForMetrics = visiblePoints.length > 0 ? visiblePoints : currentChartData?.points ?? [];
 
   function submitSymbol(symbol: string) {
     const nextSymbol = symbol.trim().toUpperCase();
@@ -199,10 +216,10 @@ export function StockDashboard() {
   function applyPreset(nextRange: RangePreset) {
     setPresetSelection(nextRange);
 
-    if (nextRange === "max" && chartData?.points.length) {
+    if (nextRange === "max" && currentChartData?.points.length) {
       const nextWindow = {
-        start: chartData.points[0]?.time ?? null,
-        end: chartData.points.at(-1)?.time ?? null,
+        start: currentChartData.points[0]?.time ?? null,
+        end: currentChartData.points.at(-1)?.time ?? null,
       };
 
       setActivePreset("max");
@@ -228,7 +245,7 @@ export function StockDashboard() {
     }
 
     setDateInputs(normalized);
-    setActivePreset(chartData ? detectPreset(normalized, chartData.points) : null);
+    setActivePreset(currentChartData ? detectPreset(normalized, currentChartData.points) : null);
     pushVisibleWindow(normalized);
   }
 
@@ -333,28 +350,30 @@ export function StockDashboard() {
                   >
                     {isWatched ? "已在自选" : "加入自选"}
                   </button>
-                  <div className={styles.badge}>{chartData?.snapshot.exchange || "Loading"}</div>
+                  <div className={styles.badge}>{currentChartData?.snapshot.exchange || "Loading"}</div>
                 </div>
               </div>
 
               <div className={styles.priceRow}>
-                <span className={styles.price}>{formatPrice(chartData?.snapshot.regularMarketPrice, chartData?.snapshot.currency)}</span>
+                <span className={styles.price}>
+                  {formatPrice(currentChartData?.snapshot.regularMarketPrice, currentChartData?.snapshot.currency)}
+                </span>
                 <span className={changeClass}>
-                  {formatSigned(change)} ({formatPercent(chartData?.snapshot.changePercent)})
+                  {formatSigned(change)} ({formatPercent(currentChartData?.snapshot.changePercent)})
                 </span>
                 <span className={styles.subtle}>
-                  {chartData?.snapshot.quoteType || "Asset"} · {chartData?.snapshot.marketState || "Market"}
+                  {currentChartData?.snapshot.quoteType || "Asset"} · {currentChartData?.snapshot.marketState || "Market"}
                 </span>
               </div>
 
               <div className={styles.metricsList}>
-                <MetricItem label="今日开盘" value={formatMaybe(chartData?.snapshot.open)} />
-                <MetricItem label="昨收" value={formatMaybe(chartData?.snapshot.previousClose)} />
+                <MetricItem label="今日开盘" value={formatMaybe(currentChartData?.snapshot.open)} />
+                <MetricItem label="昨收" value={formatMaybe(currentChartData?.snapshot.previousClose)} />
                 <MetricItem label="区间最高" value={formatMaybe(maxPointValue(pointsForMetrics, "high"))} />
                 <MetricItem label="区间最低" value={formatMaybe(minPointValue(pointsForMetrics, "low"))} />
-                <MetricItem label="成交量" value={formatVolume(chartData?.snapshot.volume)} />
-                <MetricItem label="52周高" value={formatMaybe(chartData?.snapshot.fiftyTwoWeekHigh)} />
-                <MetricItem label="52周低" value={formatMaybe(chartData?.snapshot.fiftyTwoWeekLow)} />
+                <MetricItem label="成交量" value={formatVolume(currentChartData?.snapshot.volume)} />
+                <MetricItem label="52周高" value={formatMaybe(currentChartData?.snapshot.fiftyTwoWeekHigh)} />
+                <MetricItem label="52周低" value={formatMaybe(currentChartData?.snapshot.fiftyTwoWeekLow)} />
               </div>
             </section>
           </div>
@@ -500,11 +519,11 @@ export function StockDashboard() {
           {chartError && <p className={styles.note}>{chartError}</p>}
 
           <div className={styles.chartSurface}>
-            {chartData?.points.length ? (
+            {currentChartData?.points.length ? (
               <>
                 <CandlestickChart
                   key={`${selectedSymbol}-${interval}`}
-                  data={chartData.points}
+                  data={currentChartData.points}
                   showVolume={showVolume}
                   movingAverages={movingAverages}
                   visibleWindow={viewWindow}
