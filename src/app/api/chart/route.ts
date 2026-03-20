@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getChartData, getChartQuery } from "@/lib/market";
+import { getChartQuery } from "@/lib/market";
+import { getChartData } from "@/lib/market-data-source";
 
 export async function GET(request: NextRequest) {
   try {

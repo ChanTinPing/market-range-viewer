@@ -4,6 +4,7 @@ import { startTransition, useCallback, useDeferredValue, useEffect, useRef, useS
 import { CandlestickChart } from "@/components/candlestick-chart";
 import styles from "@/components/stock-dashboard.module.css";
 import {
+  DEFAULT_DATA_SOURCE,
   DEFAULT_INTERVAL,
   DEFAULT_RANGE,
   DEFAULT_SYMBOL,
@@ -13,6 +14,7 @@ import {
 import type {
   CandlePoint,
   ChartInterval,
+  MarketDataSource,
   ChartPayload,
   RangePreset,
   SearchResult,
@@ -36,6 +38,7 @@ const INTERVAL_OPTIONS: Array<{ label: string; value: ChartInterval }> = [
 const MARKET_GUIDE = ["AAPL", "0700.HK", "5183.KL", "EURUSD=X", "GC=F", "BTC-USD"];
 
 const STORAGE_KEY = "market-range-viewer.watchlist";
+const DATA_SOURCE_STORAGE_KEY = "market-range-viewer.data-source";
 
 export function StockDashboard() {
   const initialDates = defaultDateRange(DEFAULT_RANGE);
@@ -55,15 +58,21 @@ export function StockDashboard() {
   const [presetSelection, setPresetSelection] = useState<RangePreset>(DEFAULT_RANGE);
   const [activePreset, setActivePreset] = useState<RangePreset | null>(DEFAULT_RANGE);
   const [dateInputs, setDateInputs] = useState(initialDates);
+  const [dataSource, setDataSource] = useState<MarketDataSource>(DEFAULT_DATA_SOURCE);
   const [viewWindow, setViewWindow] = useState<VisibleWindowRequest>({
     start: initialDates.start,
     end: initialDates.end,
     version: 0,
   });
   const deferredQuery = useDeferredValue(draftSymbol.trim());
-  const chartCacheKey = `${selectedSymbol}:${interval}`;
+  const chartCacheKey = `${selectedSymbol}:${interval}:${dataSource}`;
   const currentChartData =
-    chartData && chartData.symbol === selectedSymbol && chartData.interval === interval ? chartData : null;
+    chartData &&
+    chartData.symbol === selectedSymbol &&
+    chartData.interval === interval &&
+    chartData.source === dataSource
+      ? chartData
+      : null;
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [debugLog, setDebugLog] = useState<DebugEntry[]>([]);
   const debugEnabledRef = useRef(false);
@@ -76,10 +85,22 @@ export function StockDashboard() {
     const params = new URLSearchParams(window.location.search);
     const queryEnabled = params.get("debugChart") === "1";
     const storedEnabled = window.localStorage.getItem("market-range-viewer.debug-chart") === "1";
+    const querySource = params.get("source");
+    const storedSource = window.localStorage.getItem(DATA_SOURCE_STORAGE_KEY);
+
     if (queryEnabled) {
       window.localStorage.setItem("market-range-viewer.debug-chart", "1");
     }
+
+    const nextSource = querySource === "mock" || querySource === "yahoo"
+      ? querySource
+      : storedSource === "mock" || storedSource === "yahoo"
+        ? storedSource
+        : DEFAULT_DATA_SOURCE;
+
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, nextSource);
     setDebugEnabled(queryEnabled || storedEnabled);
+    setDataSource(nextSource);
   }, []);
 
   useEffect(() => {
@@ -101,6 +122,19 @@ export function StockDashboard() {
     setDebugLog((current) => [...current.slice(-19), entry]);
   }, []);
 
+  const switchDataSource = useCallback((nextSource: MarketDataSource) => {
+    appendDebug("switch-data-source", {
+      from: dataSource,
+      to: nextSource,
+    });
+    setDataSource(nextSource);
+    window.localStorage.setItem(DATA_SOURCE_STORAGE_KEY, nextSource);
+
+    const params = new URLSearchParams(window.location.search);
+    params.set("source", nextSource);
+    window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
+  }, [appendDebug, dataSource]);
+
   useEffect(() => {
     const controller = new AbortController();
 
@@ -113,7 +147,11 @@ export function StockDashboard() {
       setSearchLoading(true);
 
       try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(deferredQuery)}`, { signal: controller.signal });
+        const params = new URLSearchParams({
+          q: deferredQuery,
+          source: dataSource,
+        });
+        const response = await fetch(`/api/search?${params.toString()}`, { signal: controller.signal });
         const payload = (await response.json()) as { results?: SearchResult[] };
         setSearchResults(payload.results ?? []);
       } catch (error: unknown) {
@@ -130,7 +168,7 @@ export function StockDashboard() {
     void runSearch();
 
     return () => controller.abort();
-  }, [deferredQuery, selectedSymbol]);
+  }, [dataSource, deferredQuery, selectedSymbol]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -142,6 +180,7 @@ export function StockDashboard() {
       chartCacheKey,
       selectedSymbol,
       interval,
+      dataSource,
       viewWindowStart: viewWindow.start,
       viewWindowEnd: viewWindow.end,
       viewWindowVersion: viewWindow.version,
@@ -155,6 +194,7 @@ export function StockDashboard() {
       setChartLoading(false);
       appendDebug("dashboard-cache-hit", {
         chartCacheKey,
+        dataSource,
         points: cached.points.length,
         firstPoint: cached.points[0]?.time ?? null,
         lastPoint: cached.points.at(-1)?.time ?? null,
@@ -174,6 +214,7 @@ export function StockDashboard() {
         const params = new URLSearchParams({
           symbol: selectedSymbol,
           interval,
+          source: dataSource,
         });
 
         if (fetchWindow?.start && fetchWindow?.end) {
@@ -196,6 +237,7 @@ export function StockDashboard() {
         setChartData(payload);
         appendDebug("dashboard-fetch-success", {
           chartCacheKey,
+          dataSource,
           points: payload.points.length,
           firstPoint: payload.points[0]?.time ?? null,
           lastPoint: payload.points.at(-1)?.time ?? null,
@@ -207,6 +249,11 @@ export function StockDashboard() {
           return;
         }
 
+        appendDebug("dashboard-fetch-error", {
+          chartCacheKey,
+          dataSource,
+          message: error instanceof Error ? error.message : "unknown",
+        });
         setChartError(error instanceof Error ? error.message : "加载行情失败");
       } finally {
         if (active) {
@@ -221,7 +268,7 @@ export function StockDashboard() {
       active = false;
       controller.abort();
     };
-  }, [appendDebug, chartCacheKey, interval, selectedSymbol, viewWindow]);
+  }, [appendDebug, chartCacheKey, dataSource, interval, selectedSymbol, viewWindow]);
 
   useEffect(() => {
     if (!currentChartData) {
@@ -249,13 +296,15 @@ export function StockDashboard() {
   useEffect(() => {
     appendDebug("dashboard-current-data", {
       chartCacheKey,
+      dataSource,
       chartDataSymbol: chartData?.symbol ?? null,
       chartDataInterval: chartData?.interval ?? null,
+      chartDataSource: chartData?.source ?? null,
       currentDataPoints: currentChartData?.points.length ?? 0,
       currentDataFirstPoint: currentChartData?.points[0]?.time ?? null,
       currentDataLastPoint: currentChartData?.points.at(-1)?.time ?? null,
     });
-  }, [appendDebug, chartCacheKey, chartData, currentChartData]);
+  }, [appendDebug, chartCacheKey, chartData, currentChartData, dataSource]);
 
   const isWatched = watchlist.includes(selectedSymbol);
   const displayName = currentChartData?.snapshot.longName || currentChartData?.snapshot.shortName || selectedSymbol;
@@ -281,6 +330,7 @@ export function StockDashboard() {
 
   function pushVisibleWindow(window: { start: string | null; end: string | null }) {
     appendDebug("push-visible-window", {
+      dataSource,
       start: window.start,
       end: window.end,
       nextVersion: viewWindow.version + 1,
@@ -295,6 +345,7 @@ export function StockDashboard() {
   function applyPreset(nextRange: RangePreset) {
     appendDebug("apply-preset", {
       preset: nextRange,
+      dataSource,
       currentDataPoints: currentChartData?.points.length ?? 0,
     });
     setPresetSelection(nextRange);
@@ -328,6 +379,7 @@ export function StockDashboard() {
     }
 
     appendDebug("apply-custom-dates", {
+      dataSource,
       start: normalized.start,
       end: normalized.end,
     });
@@ -610,13 +662,29 @@ export function StockDashboard() {
               <div className={styles.debugHeader}>
                 <strong>Chart Debug</strong>
                 <span>
-                  {selectedSymbol} · {interval} · points {currentChartData?.points.length ?? 0}
+                  {selectedSymbol} · {interval} · {dataSource} · points {currentChartData?.points.length ?? 0}
                 </span>
               </div>
               <div className={styles.debugMeta}>
                 <span>window {viewWindow.start ?? "null"} ~ {viewWindow.end ?? "null"}</span>
                 <span>version {viewWindow.version}</span>
                 <span>loading {chartLoading ? "true" : "false"}</span>
+              </div>
+              <div className={styles.debugControls}>
+                <button
+                  type="button"
+                  className={`${styles.toggle} ${dataSource === "yahoo" ? styles.active : ""}`}
+                  onClick={() => switchDataSource("yahoo")}
+                >
+                  Yahoo Source
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.toggle} ${dataSource === "mock" ? styles.active : ""}`}
+                  onClick={() => switchDataSource("mock")}
+                >
+                  Mock Source
+                </button>
               </div>
               <div className={styles.debugLog}>
                 {debugLog.length === 0 ? (
@@ -639,7 +707,7 @@ export function StockDashboard() {
             {currentChartData?.points.length ? (
               <>
                 <CandlestickChart
-                  key={`${selectedSymbol}-${interval}`}
+                  key={`${selectedSymbol}-${interval}-${dataSource}`}
                   data={currentChartData.points}
                   showVolume={showVolume}
                   movingAverages={movingAverages}

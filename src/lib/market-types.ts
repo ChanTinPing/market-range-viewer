@@ -1,4 +1,5 @@
 export type ChartInterval = "1d" | "1wk" | "1mo";
+export type MarketDataSource = "yahoo" | "mock";
 
 export type RangePreset = "1mo" | "3mo" | "6mo" | "1y" | "3y" | "5y" | "max";
 
@@ -53,6 +54,7 @@ export type AssetSnapshot = {
 export type ChartPayload = {
   symbol: string;
   interval: ChartInterval;
+  source: MarketDataSource;
   range: string;
   start: string | null;
   end: string | null;
@@ -61,4 +63,13 @@ export type ChartPayload = {
   note: string | null;
   snapshot: AssetSnapshot;
   points: CandlePoint[];
+};
+
+export type ChartDataRequest = {
+  symbol: string;
+  interval: ChartInterval;
+  source: MarketDataSource;
+  range: RangePreset;
+  start: string | null;
+  end: string | null;
 };

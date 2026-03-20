@@ -415,6 +415,12 @@
   align-items: center;
 }
 
+.debugControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .debugLog {
   display: grid;
   gap: 8px;
