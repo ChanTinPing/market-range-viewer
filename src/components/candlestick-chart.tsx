@@ -11,6 +11,8 @@ type CandlestickChartProps = {
   showVolume: boolean;
   movingAverages: number[];
   visibleWindow: VisibleWindowRequest;
+  debug?: boolean;
+  onDebugEvent?: (entry: { stage: string; detail: Record<string, string | number | boolean | null> }) => void;
 };
 
 type LineDatum = {
@@ -18,7 +20,7 @@ type LineDatum = {
   value: number;
 };
 
-export function CandlestickChart({ data, showVolume, movingAverages, visibleWindow }: CandlestickChartProps) {
+export function CandlestickChart({ data, showVolume, movingAverages, visibleWindow, debug = false, onDebugEvent }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -149,6 +151,16 @@ export function CandlestickChart({ data, showVolume, movingAverages, visibleWind
     candleSeriesRef.current.setData(candles);
     volumeSeriesRef.current.setData(showVolume ? volumes : []);
     syncMovingAverages(chart, movingAverageRefs, data, movingAverages);
+    emitDebug(debug, onDebugEvent, "series-data-set", {
+      dataLength: data.length,
+      firstPoint: data[0]?.time ?? null,
+      lastPoint: data.at(-1)?.time ?? null,
+      visibleWindowStart: visibleWindow.start,
+      visibleWindowEnd: visibleWindow.end,
+      visibleWindowVersion: visibleWindow.version,
+      showVolume,
+      movingAverages: movingAverages.join(","),
+    });
 
     const dataSignature = getDataSignature(data);
     const dataChanged = lastRenderedDataSignatureRef.current !== dataSignature;
@@ -156,6 +168,10 @@ export function CandlestickChart({ data, showVolume, movingAverages, visibleWind
     if (dataChanged) {
       chart.timeScale().fitContent();
       lastRenderedDataSignatureRef.current = dataSignature;
+      emitDebug(debug, onDebugEvent, "fit-content", {
+        reason: "data-signature-changed",
+        dataSignature,
+      });
     }
 
     if (data.length === 0) {
@@ -172,6 +188,10 @@ export function CandlestickChart({ data, showVolume, movingAverages, visibleWind
       lastAppliedWindowRef.current.dataSignature !== dataSignature;
 
     if (!shouldApplyVisibleWindow) {
+      emitDebug(debug, onDebugEvent, "skip-visible-range", {
+        dataSignature,
+        visibleWindowVersion: visibleWindow.version,
+      });
       return;
     }
 
@@ -179,15 +199,29 @@ export function CandlestickChart({ data, showVolume, movingAverages, visibleWind
 
     if (nextRange) {
       chart.timeScale().setVisibleLogicalRange(nextRange);
+      emitDebug(debug, onDebugEvent, "visible-range-applied", {
+        from: nextRange.from,
+        to: nextRange.to,
+        dataSignature,
+        visibleWindowStart: visibleWindow.start,
+        visibleWindowEnd: visibleWindow.end,
+        visibleWindowVersion: visibleWindow.version,
+      });
     } else {
       chart.timeScale().fitContent();
+      emitDebug(debug, onDebugEvent, "fit-content", {
+        reason: "no-logical-range",
+        dataSignature,
+        visibleWindowStart: visibleWindow.start,
+        visibleWindowEnd: visibleWindow.end,
+      });
     }
 
     lastAppliedWindowRef.current = {
       version: visibleWindow.version,
       dataSignature,
     };
-  }, [data, movingAverages, showVolume, visibleWindow]);
+  }, [data, movingAverages, showVolume, visibleWindow, debug, onDebugEvent]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 }
@@ -332,4 +366,17 @@ function getDataSignature(data: CandlePoint[]) {
   }
 
   return `${data.length}:${data[0]?.time ?? ""}:${data.at(-1)?.time ?? ""}`;
+}
+
+function emitDebug(
+  debug: boolean,
+  onDebugEvent: CandlestickChartProps["onDebugEvent"],
+  stage: string,
+  detail: Record<string, string | number | boolean | null>,
+) {
+  if (!debug || !onDebugEvent) {
+    return;
+  }
+
+  onDebugEvent({ stage, detail });
 }

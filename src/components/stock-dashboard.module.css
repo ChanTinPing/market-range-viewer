@@ -398,6 +398,51 @@
   margin: 0;
 }
 
+.debugPanel {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 205, 107, 0.22);
+  background: rgba(255, 205, 107, 0.08);
+}
+
+.debugHeader,
+.debugMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+}
+
+.debugLog {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.debugEntry {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(4, 13, 20, 0.72);
+  border: 1px solid rgba(142, 168, 191, 0.12);
+}
+
+.debugStage {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #ffcd6b;
+}
+
+.debugDetail {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
 @media (max-width: 1120px) {
   .topGrid {
     grid-template-columns: 1fr;
